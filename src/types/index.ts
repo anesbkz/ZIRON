@@ -1,0 +1,38 @@
+export type Locale = 'en' | 'fr' | 'ar';
+export type Direction = 'ltr' | 'rtl';
+
+export type PublicRoute =
+  | ''
+  | 'ziron'
+  | 'program'
+  | 'science'
+  | 'quality'
+  | 'verify'
+  | 'shop'
+  | 'about'
+  | 'restart'
+  | 'faq'
+  | 'login'
+  | 'register'
+  | 'community'
+  | 'school'
+  | 'app'
+  | 'app/community'
+  | 'app/school'
+  | 'admin'
+  | 'admin/users'
+  | 'admin/roles'
+  | 'admin/products'
+  | 'admin/codes'
+  | 'admin/orders'
+  | 'admin/community'
+  | 'admin/school'
+  | 'admin/courses'
+  | 'admin/certificates'
+  | 'admin/rewards'
+  | 'admin/notifications'
+  | 'admin/cms'
+  | 'admin/analytics'
+  | 'admin/audit'
+  | 'admin/settings';
+

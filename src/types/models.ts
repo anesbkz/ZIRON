@@ -1,0 +1,262 @@
+import { AppRole } from './rbac';
+
+export type UserStatus = 'active' | 'pending' | 'suspended' | 'archived';
+
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  phoneNumber?: string;
+  status: UserStatus;
+  roles: AppRole[];
+  createdAt: string;
+  updatedAt: string;
+  onboardingCompleted: boolean;
+  communityAccess: boolean;
+  schoolAccess: boolean;
+  xp: number;
+  level: number;
+  locale: string;
+}
+
+/* ==========================================================================
+   SCHOOL MODELS (Dynamic Firestore-Driven)
+   ========================================================================== */
+
+export interface MultilingualText {
+  en: string;
+  fr: string;
+  ar: string;
+}
+
+export interface SchoolCategory {
+  id: string;
+  slug: string;
+  title: MultilingualText;
+  description: MultilingualText;
+  iconName?: string;
+  displayOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+  courseCount?: number;
+}
+
+export interface SchoolCourse {
+  id: string;
+  categoryId: string;
+  slug: string;
+  title: MultilingualText;
+  description: MultilingualText;
+  difficulty: 'FOUNDATIONAL' | 'INTERMEDIATE' | 'ADVANCED';
+  estimatedHours: number;
+  isPublished: boolean;
+  displayOrder: number;
+  requiredPhase?: 1 | 2 | 3;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchoolModule {
+  id: string;
+  courseId: string;
+  title: MultilingualText;
+  description?: MultilingualText;
+  displayOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+}
+
+export interface SchoolLesson {
+  id: string;
+  courseId: string;
+  moduleId: string;
+  title: MultilingualText;
+  contentMarkdown: MultilingualText;
+  durationMinutes: number;
+  displayOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+}
+
+export interface SchoolQuizQuestion {
+  id: string;
+  prompt: MultilingualText;
+  options: MultilingualText[];
+  correctOptionIndex: number;
+  explanation?: MultilingualText;
+}
+
+export interface SchoolQuiz {
+  id: string;
+  courseId: string;
+  moduleId?: string;
+  title: MultilingualText;
+  passingScorePercent: number;
+  questions: SchoolQuizQuestion[];
+  isPublished: boolean;
+}
+
+export interface SchoolCertificate {
+  id: string;
+  certificateNumber: string;
+  userId: string;
+  userDisplayName: string;
+  courseId: string;
+  courseTitle: string;
+  issueDate: string;
+  isRevoked: boolean;
+  verificationHash: string;
+}
+
+/* ==========================================================================
+   COMMUNITY MODELS
+   ========================================================================== */
+
+export interface CommunityAnnouncement {
+  id: string;
+  title: MultilingualText;
+  content: MultilingualText;
+  isPinned: boolean;
+  priority: 'NORMAL' | 'HIGH' | 'URGENT';
+  authorId: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommunityPost {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRoles: AppRole[];
+  categorySlug?: string;
+  title: string;
+  body: string;
+  tags?: string[];
+  likesCount: number;
+  commentsCount: number;
+  isLocked: boolean;
+  isPinned: boolean;
+  status: 'published' | 'hidden' | 'flagged';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  authorId: string;
+  authorName: string;
+  body: string;
+  status: 'published' | 'hidden' | 'flagged';
+  createdAt: string;
+}
+
+export interface CommunityReport {
+  id: string;
+  reporterUserId: string;
+  targetType: 'POST' | 'COMMENT' | 'USER';
+  targetId: string;
+  reason: string;
+  status: 'PENDING' | 'RESOLVED' | 'DISMISSED';
+  createdAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+}
+
+/* ==========================================================================
+   PRODUCTS & CODES
+   ========================================================================== */
+
+export interface ProductModel {
+  id: string;
+  sku: string;
+  title: MultilingualText;
+  subtitle: MultilingualText;
+  phaseNumber: number;
+  capsuleCount: number;
+  priceDzd: number | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface BatchModel {
+  id: string;
+  batchNumber: string;
+  productSku: string;
+  manufactureDate: string;
+  expiryDate: string;
+  testingStatus: 'PENDING' | 'PASS' | 'FLAGGED';
+  coaUrl?: string;
+  notes?: string;
+}
+
+export interface ProductCodeModel {
+  id: string;
+  code: string; // e.g. ZR-PH01-XXXX-XXXX
+  batchId: string;
+  productSku: string;
+  isActivated: boolean;
+  activatedByUserId?: string;
+  activatedAt?: string;
+  grantsSchoolAccess: boolean;
+  grantsCommunityAccess: boolean;
+  createdAt: string;
+}
+
+/* ==========================================================================
+   AUDIT LOGGING
+   ========================================================================== */
+
+export type AuditActionType =
+  | 'USER_ROLE_CHANGED'
+  | 'USER_STATUS_CHANGED'
+  | 'USER_CREATED'
+  | 'PRODUCT_CREATED'
+  | 'PRODUCT_UPDATED'
+  | 'PRODUCT_CODE_CREATED'
+  | 'PRODUCT_CODE_ACTIVATED'
+  | 'ENTITLEMENT_GRANTED'
+  | 'CATEGORY_CREATED'
+  | 'CATEGORY_UPDATED'
+  | 'CATEGORY_ARCHIVED'
+  | 'COURSE_CREATED'
+  | 'COURSE_UPDATED'
+  | 'COURSE_PUBLISHED'
+  | 'COMMUNITY_POST_REMOVED'
+  | 'COMMUNITY_ANNOUNCEMENT_CREATED'
+  | 'CERTIFICATE_ISSUED'
+  | 'CERTIFICATE_REVOKED'
+  | 'SETTINGS_CHANGED'
+  | 'CMS_CONTENT_UPDATED';
+
+export interface AuditLogEntry {
+  id: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRoles: AppRole[];
+  action: AuditActionType;
+  resourceType: string;
+  resourceId: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type AuditLog = AuditLogEntry;
+
+/* ==========================================================================
+   NOTIFICATIONS
+   ========================================================================== */
+
+export interface NotificationItem {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ALERT';
+  isRead: boolean;
+  link?: string;
+  createdAt: string;
+}
