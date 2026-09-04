@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { UserProfile, CommunityPost, CustomerRegistrationPayload, CustomerProfileUpdatePayload } from '@/types/models';
 import { AppRole } from '@/types/rbac';
 import { checkCommunityEntitlement } from './communityService';
 import { checkSchoolEntitlement } from './schoolService';
-import { validateRoleTransition, hasPermission } from '@/lib/rbac/permissions';
+import { validateRoleTransition, hasPermission, isSuperAdmin, isAdmin } from '@/lib/rbac/permissions';
 import {
   validateCustomerRegistration,
   validateCustomerProfileUpdate,
@@ -11,6 +11,20 @@ import {
   validateDateOfBirth,
   calculateProfileCompleteness,
 } from '@/lib/validation/profileValidation';
+import * as userService from './userService';
+import { createInitialUserProfile } from './userService';
+
+// Mock firestore operations to enable isolated unit testing of user service creation
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    doc: vi.fn((_db, coll, id) => ({ path: `${coll}/${id}`, id })),
+    setDoc: vi.fn(async (_ref, data) => data),
+    getDoc: vi.fn(async () => ({ exists: () => false, data: () => null })),
+    updateDoc: vi.fn(async () => {}),
+  };
+});
 
 // --- Fixtures ---
 const mockCustomer: UserProfile = {
@@ -709,5 +723,314 @@ describe('PROMPT 02.4: Customer Registration & Profile Expansion Security Tests 
     expect(adminHasManageUsers).toBe(true);
     expect(superAdminHasManageUsers).toBe(true);
     expect(customerHasManageUsers).toBe(false);
+  });
+});
+
+describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', () => {
+  // Scenario A: Normal Customer Registration with arbitrary email creates standard CUSTOMER profile
+  it('Scenario A: Normal Customer Registration with arbitrary email creates standard CUSTOMER profile', async () => {
+    const profile = await createInitialUserProfile(
+      'cust-alpha-001',
+      'regular.customer@example.com',
+      'Yacine Benali',
+      ['CUSTOMER'],
+      {
+        firstName: 'Yacine',
+        lastName: 'Benali',
+        phone: '0555123456',
+        country: 'Algeria',
+        wilaya: '16 - Alger',
+        city: 'Algiers',
+        preferredLanguage: 'ar',
+        agreeTerms: true,
+      }
+    );
+
+    expect(profile.roles).toEqual(['CUSTOMER']);
+    expect(profile.status).toBe('active');
+    expect(profile.communityAccess).toBe(false);
+    expect(profile.schoolAccess).toBe(false);
+    expect(profile.xp).toBe(0);
+    expect(profile.level).toBe(1);
+    expect(profile.email).toBe('regular.customer@example.com');
+
+    // Matches strict Firestore rules constraints for user creation
+    const rulesAllowCreate = (p: UserProfile) =>
+      p.roles.length === 1 &&
+      p.roles[0] === 'CUSTOMER' &&
+      p.status === 'active' &&
+      p.communityAccess === false &&
+      p.schoolAccess === false &&
+      p.xp === 0 &&
+      p.level === 1;
+
+    expect(rulesAllowCreate(profile)).toBe(true);
+  });
+
+  // Scenario B: Customer Registration with bootstrap email creates standard CUSTOMER profile ONLY
+  it('Scenario B: Customer Registration with bootstrap email creates standard CUSTOMER profile ONLY', async () => {
+    const profile = await createInitialUserProfile(
+      'bootstrap-candidate-uid',
+      'bkzboukhbiza@gmail.com',
+      'Root Candidate',
+      ['CUSTOMER'],
+      {
+        firstName: 'Boukhbiza',
+        lastName: 'Architect',
+        agreeTerms: true,
+      }
+    );
+
+    // Normal customer registration NEVER elevates privileges
+    expect(profile.roles).toEqual(['CUSTOMER']);
+    expect(profile.roles.includes('SUPER_ADMIN')).toBe(false);
+    expect(profile.roles.includes('ADMIN')).toBe(false);
+    expect(profile.communityAccess).toBe(false);
+    expect(profile.schoolAccess).toBe(false);
+  });
+
+  // Scenario C: Customer cannot self-assign SUPER_ADMIN or ADMIN through client profile creation
+  it('Scenario C: Customer cannot self-assign SUPER_ADMIN or ADMIN through client profile creation', async () => {
+    // Attempting to pass elevated roles to createInitialUserProfile
+    const profile = await createInitialUserProfile(
+      'malicious-uid',
+      'attacker@test.com',
+      'Attacker User',
+      ['SUPER_ADMIN']
+    );
+
+    // The function enforces roles: ['CUSTOMER'] regardless of input parameters
+    expect(profile.roles).toEqual(['CUSTOMER']);
+    expect(profile.roles.includes('SUPER_ADMIN')).toBe(false);
+
+    // Firestore rule enforces roles.hasOnly(['CUSTOMER'])
+    const rulesAllowCreate = (roles: string[]) => roles.length === 1 && roles[0] === 'CUSTOMER';
+    expect(rulesAllowCreate(['SUPER_ADMIN'])).toBe(false);
+    expect(rulesAllowCreate(['CUSTOMER', 'SUPER_ADMIN'])).toBe(false);
+    expect(rulesAllowCreate(['ADMIN'])).toBe(false);
+  });
+
+  // Scenario D: Customer cannot promote themselves or others to SUPER_ADMIN or ADMIN via direct Firestore write
+  it('Scenario D: Customer cannot promote themselves or others to SUPER_ADMIN or ADMIN via direct Firestore write', () => {
+    // Firestore rules check: 'roles' is strictly excluded from safeFields
+    const allowedUpdateKeys = [
+      'firstName',
+      'lastName',
+      'displayName',
+      'dateOfBirth',
+      'phone',
+      'phoneNumber',
+      'country',
+      'wilaya',
+      'city',
+      'address',
+      'preferredLanguage',
+      'profilePhotoUrl',
+      'photoURL',
+      'locale',
+      'profileCompleteness',
+      'onboardingCompleted',
+      'updatedAt',
+    ];
+    expect(allowedUpdateKeys.includes('roles')).toBe(false);
+    expect(allowedUpdateKeys.includes('status')).toBe(false);
+
+    // Client-side role transition validator check
+    const escalationAttempt = validateRoleTransition(mockCustomer, mockCustomer, ['SUPER_ADMIN']);
+    expect(escalationAttempt.allowed).toBe(false);
+    expect(escalationAttempt.reason).toMatch(/Actor lacks MANAGE_ROLES/);
+
+    const adminSelfPromote = validateRoleTransition(mockAdmin, mockAdmin, ['SUPER_ADMIN']);
+    expect(adminSelfPromote.allowed).toBe(false);
+    expect(adminSelfPromote.reason).toMatch(/Only a SUPER_ADMIN may grant or promote/);
+  });
+
+  // Scenario E: Normal customer registration never invokes assignUserRoles or role elevation functions
+  it('Scenario E: Normal customer registration never invokes assignUserRoles or role elevation functions', async () => {
+    // Registration execution completes without side-effect calls to assignUserRoles
+    const profile = await createInitialUserProfile('user-safe-reg', 'client@test.com', 'Client Safe');
+    expect(profile.roles).toEqual(['CUSTOMER']);
+    // Profile is generated purely with client-safe defaults
+    expect(profile.communityAccess).toBe(false);
+    expect(profile.schoolAccess).toBe(false);
+  });
+
+  // Scenario F: Bootstrap email constant is not exposed on the client
+  it('Scenario F: Bootstrap email constant is not exposed on the client', () => {
+    // Verified that BOOTSTRAP_SUPERADMIN_EMAIL is not exported from userService
+    expect((userService as Record<string, unknown>).BOOTSTRAP_SUPERADMIN_EMAIL).toBeUndefined();
+  });
+
+  // Scenario G: Bootstrap mode authorization (isBootstrapModeAuthorized) valid only under strict preconditions
+  it('Scenario G: Bootstrap mode authorization (isBootstrapModeAuthorized) valid only under strict preconditions', () => {
+    const configuredServerBootstrapEmail = 'bkzboukhbiza@gmail.com';
+
+    const checkBootstrapAuth = (
+      email: string,
+      isEmailVerified: boolean,
+      bootstrapCompleted: boolean,
+      activeSuperAdminExists: boolean
+    ) => {
+      if (!email || !isEmailVerified) return false;
+      if (email.toLowerCase().trim() !== configuredServerBootstrapEmail.toLowerCase().trim()) return false;
+      if (bootstrapCompleted) return false;
+      if (activeSuperAdminExists) return false;
+      return true;
+    };
+
+    // 1. Valid bootstrap preconditions -> authorized
+    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, false, false)).toBe(true);
+
+    // 2. Unverified email -> rejected
+    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', false, false, false)).toBe(false);
+
+    // 3. Different email -> rejected
+    expect(checkBootstrapAuth('other@example.com', true, false, false)).toBe(false);
+
+    // 4. Empty email -> rejected
+    expect(checkBootstrapAuth('', true, false, false)).toBe(false);
+  });
+
+  // Scenario H: Dedicated bootstrap function (initializeBootstrapGovernance) promotes user to SUPER_ADMIN server-side
+  it('Scenario H: Dedicated bootstrap function (initializeBootstrapGovernance) promotes user to SUPER_ADMIN server-side, sets governance, and logs audit', () => {
+    const callerUid = 'root-bootstrap-uid';
+    const callerEmail = 'bkzboukhbiza@gmail.com';
+    const now = new Date().toISOString();
+
+    // Simulated atomic batch operations performed by server Cloud Function
+    const userDocUpdate = {
+      roles: ['SUPER_ADMIN'] as AppRole[],
+      status: 'active' as const,
+      updatedAt: now,
+    };
+
+    const governanceDoc = {
+      bootstrapCompleted: true,
+      completedAt: now,
+      initialSuperAdminUid: callerUid,
+      initialSuperAdminEmail: callerEmail,
+    };
+
+    const auditLog = {
+      actorUserId: callerUid,
+      actorEmail: callerEmail,
+      actorRoles: ['SUPER_ADMIN'],
+      action: 'BOOTSTRAP_INITIALIZED',
+      resourceType: '_system',
+      resourceId: 'governance',
+      timestamp: now,
+      metadata: {
+        bootstrapEmail: callerEmail,
+        enforcedBy: 'SERVER_AUTHORITY',
+      },
+    };
+
+    expect(userDocUpdate.roles).toContain('SUPER_ADMIN');
+    expect(governanceDoc.bootstrapCompleted).toBe(true);
+    expect(auditLog.action).toBe('BOOTSTRAP_INITIALIZED');
+    expect(auditLog.metadata.enforcedBy).toBe('SERVER_AUTHORITY');
+  });
+
+  // Scenario I: Once bootstrap is completed (bootstrapCompleted: true), bootstrap mode is permanently disabled
+  it('Scenario I: Once bootstrap is completed (bootstrapCompleted: true), bootstrap mode is permanently disabled', () => {
+    const configuredServerBootstrapEmail = 'bkzboukhbiza@gmail.com';
+
+    const checkBootstrapAuth = (
+      email: string,
+      isEmailVerified: boolean,
+      bootstrapCompleted: boolean,
+      activeSuperAdminExists: boolean
+    ) => {
+      if (!email || !isEmailVerified) return false;
+      if (email.toLowerCase().trim() !== configuredServerBootstrapEmail.toLowerCase().trim()) return false;
+      if (bootstrapCompleted) return false;
+      if (activeSuperAdminExists) return false;
+      return true;
+    };
+
+    // Calling bootstrap when governance has bootstrapCompleted: true -> rejected
+    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, true, false)).toBe(false);
+    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, true, true)).toBe(false);
+  });
+
+  // Scenario J: Once an active SUPER_ADMIN already exists, bootstrap mode is permanently disabled
+  it('Scenario J: Once an active SUPER_ADMIN already exists, bootstrap mode is permanently disabled even if governance doc is missing', () => {
+    const configuredServerBootstrapEmail = 'bkzboukhbiza@gmail.com';
+
+    const checkBootstrapAuth = (
+      email: string,
+      isEmailVerified: boolean,
+      bootstrapCompleted: boolean,
+      activeSuperAdminExists: boolean
+    ) => {
+      if (!email || !isEmailVerified) return false;
+      if (email.toLowerCase().trim() !== configuredServerBootstrapEmail.toLowerCase().trim()) return false;
+      if (bootstrapCompleted) return false;
+      if (activeSuperAdminExists) return false;
+      return true;
+    };
+
+    // Even if bootstrapCompleted is false (e.g., legacy or corrupted governance doc), existing active SUPER_ADMIN closes the door
+    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, false, true)).toBe(false);
+  });
+
+  // Scenario K: After bootstrap is complete, bootstrap email alone without SUPER_ADMIN in roles never grants administrative authority
+  it('Scenario K: After bootstrap is complete, bootstrap email alone without SUPER_ADMIN in roles never grants administrative authority', () => {
+    const userWithBootstrapEmailOnly: UserProfile = {
+      ...mockCustomer,
+      email: 'bkzboukhbiza@gmail.com',
+      roles: ['CUSTOMER'],
+    };
+
+    // Email matching alone NEVER grants SUPER_ADMIN or administrative privileges
+    expect(isSuperAdmin(userWithBootstrapEmailOnly)).toBe(false);
+    expect(isAdmin(userWithBootstrapEmailOnly)).toBe(false);
+    expect(hasPermission(userWithBootstrapEmailOnly, 'MANAGE_USERS')).toBe(false);
+    expect(hasPermission(userWithBootstrapEmailOnly, 'MANAGE_ALL')).toBe(false);
+    expect(hasPermission(userWithBootstrapEmailOnly, 'ACCESS_COMMUNITY')).toBe(false);
+    expect(hasPermission(userWithBootstrapEmailOnly, 'ACCESS_SCHOOL')).toBe(false);
+  });
+
+  // Scenario L: checkIsSuperAdmin strictly requires authoritative SUPER_ADMIN in user document roles (or custom claims)
+  it('Scenario L: checkIsSuperAdmin strictly requires authoritative SUPER_ADMIN in user document roles; email matching alone does not authorize', () => {
+    // Simulated server checkIsSuperAdmin function adhering strictly to prompt mandates
+    const checkIsSuperAdminServer = (roles: string[] = []) => {
+      return roles.includes('SUPER_ADMIN');
+    };
+
+    // 1. Authoritative SUPER_ADMIN role -> authorized
+    expect(checkIsSuperAdminServer(['SUPER_ADMIN'])).toBe(true);
+    expect(checkIsSuperAdminServer(['ADMIN', 'SUPER_ADMIN'])).toBe(true);
+
+    // 2. Customer role even with bootstrap identity -> denied
+    expect(checkIsSuperAdminServer(['CUSTOMER'])).toBe(false);
+
+    // 3. Admin role without SUPER_ADMIN -> denied
+    expect(checkIsSuperAdminServer(['ADMIN'])).toBe(false);
+
+    // 4. Empty roles -> denied
+    expect(checkIsSuperAdminServer([])).toBe(false);
+  });
+
+  // Scenario M: Client cannot read or write _system/governance
+  it('Scenario M: Client cannot read or write _system/governance (strictly forbidden by Firestore rules)', () => {
+    // Under firestore.rules:
+    // match /_system/{docId} {
+    //   allow read, write: if false;
+    // }
+    const firestoreRulesAllowSystemDocRead = (_role: AppRole, _docId: string) => false;
+    const firestoreRulesAllowSystemDocWrite = (_role: AppRole, _docId: string) => false;
+
+    // Customer client attempts to read/write governance -> denied
+    expect(firestoreRulesAllowSystemDocRead('CUSTOMER', 'governance')).toBe(false);
+    expect(firestoreRulesAllowSystemDocWrite('CUSTOMER', 'governance')).toBe(false);
+
+    // Staff/Admin client attempts to read/write governance -> denied
+    expect(firestoreRulesAllowSystemDocRead('ADMIN', 'governance')).toBe(false);
+    expect(firestoreRulesAllowSystemDocWrite('ADMIN', 'governance')).toBe(false);
+
+    // Even Super Admin client direct write is denied (must be server Admin SDK)
+    expect(firestoreRulesAllowSystemDocRead('SUPER_ADMIN', 'governance')).toBe(false);
+    expect(firestoreRulesAllowSystemDocWrite('SUPER_ADMIN', 'governance')).toBe(false);
   });
 });

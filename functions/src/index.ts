@@ -4,9 +4,16 @@ import * as admin from 'firebase-admin';
 admin.initializeApp();
 const db = admin.firestore();
 
-// [BOOTSTRAP ONLY] Temporary emergency bootstrap email for initial cloud project provisioning.
-// Permanent governance strictly relies on authoritative Firestore users/{uid}.roles or custom claims.
-const BOOTSTRAP_SUPERADMIN_EMAIL = 'bkzboukhbiza@gmail.com';
+// Server-authoritative bootstrap identity configuration.
+// Sourced securely from environment variables or Firebase Functions runtime config.
+// Never exposed to client-side code.
+export function getBootstrapSuperAdminEmail(): string {
+  return (
+    process.env.BOOTSTRAP_SUPERADMIN_EMAIL ||
+    functions.config()?.system?.bootstrap_email ||
+    'bkzboukhbiza@gmail.com'
+  ).toLowerCase().trim();
+}
 
 /**
  * Canonical Application Roles
@@ -33,7 +40,7 @@ export type AppRole = (typeof CANONICAL_APP_ROLES)[number];
  * 1. Initial State: No active user profile in `users` holds the `SUPER_ADMIN` role, and
  *    `_system/governance` does not indicate bootstrap completion.
  *    In this state, the configured BOOTSTRAP_SUPERADMIN_EMAIL with a verified email is permitted
- *    to perform initial provisioning and establish the initial permanent SUPER_ADMIN account.
+ *    to invoke initializeBootstrapGovernance once to establish the initial permanent SUPER_ADMIN account.
  * 
  * 2. Permanent State: Once an active user profile possesses the SUPER_ADMIN role (or bootstrapCompleted
  *    is marked true in `_system/governance`), the bootstrap shortcut is PERMANENTLY DISABLED.
@@ -45,7 +52,8 @@ export async function isBootstrapModeAuthorized(
   isEmailVerified: boolean
 ): Promise<boolean> {
   if (!callerEmail || !isEmailVerified) return false;
-  if (callerEmail.toLowerCase() !== BOOTSTRAP_SUPERADMIN_EMAIL.toLowerCase()) return false;
+  const targetBootstrapEmail = getBootstrapSuperAdminEmail();
+  if (callerEmail.toLowerCase().trim() !== targetBootstrapEmail) return false;
 
   try {
     const govSnap = await db.collection('_system').doc('governance').get();
@@ -70,16 +78,23 @@ export async function isBootstrapModeAuthorized(
   return true;
 }
 
+/**
+ * Authoritative Server-Side SUPER_ADMIN Check
+ * Permanent authorization strictly comes from authoritative users/{uid}.roles in Firestore
+ * (or Firebase custom claims).
+ * The bootstrap identity is ONLY temporary initialization authority for initializeBootstrapGovernance.
+ * Email matching alone MUST NEVER authorize SUPER_ADMIN on any administrative endpoint.
+ */
 export async function checkIsSuperAdmin(
   callerUid: string,
   callerRoles: string[],
-  callerEmail: string,
-  isEmailVerified: boolean
+  _callerEmail?: string,
+  _isEmailVerified?: boolean
 ): Promise<boolean> {
-  if (callerRoles.includes('SUPER_ADMIN')) {
+  if (callerRoles && callerRoles.includes('SUPER_ADMIN')) {
     return true;
   }
-  return await isBootstrapModeAuthorized(callerEmail, isEmailVerified);
+  return false;
 }
 
 /**

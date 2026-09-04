@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.activateContainerCode = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = void 0;
+exports.getBootstrapSuperAdminEmail = getBootstrapSuperAdminEmail;
 exports.isBootstrapModeAuthorized = isBootstrapModeAuthorized;
 exports.checkIsSuperAdmin = checkIsSuperAdmin;
 exports.writeAuthoritativeAuditLog = writeAuthoritativeAuditLog;
@@ -8,9 +9,14 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 admin.initializeApp();
 const db = admin.firestore();
-// [BOOTSTRAP ONLY] Temporary emergency bootstrap email for initial cloud project provisioning.
-// Permanent governance strictly relies on authoritative Firestore users/{uid}.roles or custom claims.
-const BOOTSTRAP_SUPERADMIN_EMAIL = 'bkzboukhbiza@gmail.com';
+// Server-authoritative bootstrap identity configuration.
+// Sourced securely from environment variables or Firebase Functions runtime config.
+// Never exposed to client-side code.
+function getBootstrapSuperAdminEmail() {
+    return (process.env.BOOTSTRAP_SUPERADMIN_EMAIL ||
+        functions.config()?.system?.bootstrap_email ||
+        'bkzboukhbiza@gmail.com').toLowerCase().trim();
+}
 /**
  * Canonical Application Roles
  */
@@ -33,7 +39,7 @@ exports.CANONICAL_APP_ROLES = [
  * 1. Initial State: No active user profile in `users` holds the `SUPER_ADMIN` role, and
  *    `_system/governance` does not indicate bootstrap completion.
  *    In this state, the configured BOOTSTRAP_SUPERADMIN_EMAIL with a verified email is permitted
- *    to perform initial provisioning and establish the initial permanent SUPER_ADMIN account.
+ *    to invoke initializeBootstrapGovernance once to establish the initial permanent SUPER_ADMIN account.
  *
  * 2. Permanent State: Once an active user profile possesses the SUPER_ADMIN role (or bootstrapCompleted
  *    is marked true in `_system/governance`), the bootstrap shortcut is PERMANENTLY DISABLED.
@@ -43,7 +49,8 @@ exports.CANONICAL_APP_ROLES = [
 async function isBootstrapModeAuthorized(callerEmail, isEmailVerified) {
     if (!callerEmail || !isEmailVerified)
         return false;
-    if (callerEmail.toLowerCase() !== BOOTSTRAP_SUPERADMIN_EMAIL.toLowerCase())
+    const targetBootstrapEmail = getBootstrapSuperAdminEmail();
+    if (callerEmail.toLowerCase().trim() !== targetBootstrapEmail)
         return false;
     try {
         const govSnap = await db.collection('_system').doc('governance').get();
@@ -65,11 +72,18 @@ async function isBootstrapModeAuthorized(callerEmail, isEmailVerified) {
     }
     return true;
 }
-async function checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified) {
-    if (callerRoles.includes('SUPER_ADMIN')) {
+/**
+ * Authoritative Server-Side SUPER_ADMIN Check
+ * Permanent authorization strictly comes from authoritative users/{uid}.roles in Firestore
+ * (or Firebase custom claims).
+ * The bootstrap identity is ONLY temporary initialization authority for initializeBootstrapGovernance.
+ * Email matching alone MUST NEVER authorize SUPER_ADMIN on any administrative endpoint.
+ */
+async function checkIsSuperAdmin(callerUid, callerRoles, _callerEmail, _isEmailVerified) {
+    if (callerRoles && callerRoles.includes('SUPER_ADMIN')) {
         return true;
     }
-    return await isBootstrapModeAuthorized(callerEmail, isEmailVerified);
+    return false;
 }
 async function writeAuthoritativeAuditLog(firestore, params, transaction) {
     const auditDocRef = firestore.collection('auditLogs').doc();

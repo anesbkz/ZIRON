@@ -15,8 +15,6 @@ import { AppRole } from '@/types/rbac';
 import { validateRoleTransition, isSuperAdmin, hasPermission } from '@/lib/rbac/permissions';
 import { calculateProfileCompleteness } from '@/lib/validation/profileValidation';
 
-export const BOOTSTRAP_SUPERADMIN_EMAIL = 'bkzboukhbiza@gmail.com';
-
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   try {
     const userDocRef = doc(db, 'users', uid);
@@ -54,11 +52,10 @@ export async function createInitialUserProfile(
   uid: string,
   email: string,
   displayName: string,
-  initialRoles: AppRole[] = ['CUSTOMER'],
+  _initialRoles: AppRole[] = ['CUSTOMER'],
   registrationData?: Partial<CustomerRegistrationPayload>
 ): Promise<UserProfile> {
   const now = new Date().toISOString();
-  const isBootstrap = email.toLowerCase() === BOOTSTRAP_SUPERADMIN_EMAIL.toLowerCase();
 
   const firstName = registrationData?.firstName?.trim() || '';
   const lastName = registrationData?.lastName?.trim() || '';
@@ -76,7 +73,10 @@ export async function createInitialUserProfile(
   const termsAcceptedAt = registrationData?.agreeTerms ? now : null;
   const privacyAcceptedAt = registrationData?.agreeTerms ? now : null;
 
-  // Base profile conforming strictly to Firestore rule constraints
+  // Base profile conforming strictly to Firestore rule constraints:
+  // Customer registration flow ALWAYS creates roles: ['CUSTOMER'] with safe defaults.
+  // NEVER elevates privileges, NEVER assigns SUPER_ADMIN or ADMIN, NEVER grants
+  // communityAccess or schoolAccess without product activation.
   const profile: UserProfile = {
     uid,
     email,
@@ -116,26 +116,21 @@ export async function createInitialUserProfile(
   const userDocRef = doc(db, 'users', uid);
   await setDoc(userDocRef, profile);
 
-  // If bootstrap email or initialRoles has elevated roles, invoke authoritative server governance
-  if (isBootstrap || (initialRoles.length === 1 && !initialRoles.includes('CUSTOMER'))) {
-    const desiredRoles: AppRole[] = isBootstrap ? ['SUPER_ADMIN'] : initialRoles;
-    try {
-      const assignCallable = httpsCallable<
-        { targetUid: string; newRoles: string[] },
-        { success: boolean }
-      >(functionsInstance, 'assignUserRoles');
-      await assignCallable({ targetUid: uid, newRoles: desiredRoles });
-      profile.roles = desiredRoles;
-      if (desiredRoles.includes('SUPER_ADMIN')) {
-        profile.communityAccess = true;
-        profile.schoolAccess = true;
-      }
-    } catch (e) {
-      console.warn('Bootstrap or initial role elevation error:', e);
-    }
-  }
-
   return profile;
+}
+
+/**
+ * Dedicated Initial Bootstrap Invocation
+ * Dedicated server-authoritative mechanism to initialize root SUPER_ADMIN.
+ * Completely isolated from customer registration.
+ */
+export async function invokeBootstrapGovernance(): Promise<{ success: boolean; message: string }> {
+  const callable = httpsCallable<void, { success: boolean; message: string }>(
+    functionsInstance,
+    'initializeBootstrapGovernance'
+  );
+  const result = await callable();
+  return result.data;
 }
 
 export async function updateSafeProfileFields(
