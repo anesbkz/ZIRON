@@ -139,9 +139,17 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 <button
                   onClick={() => handleNavClick('app')}
                   className="px-2.5 py-1.5 border border-[#E2E8F0] hover:bg-gray-50 text-[11px] font-bold text-[#0B2346] uppercase flex items-center gap-1 cursor-pointer"
+                  title="Dashboard"
                 >
                   <User className="w-3 h-3" />
                   <span>{profile?.displayName || 'Dashboard'}</span>
+                </button>
+                <button
+                  onClick={() => handleNavClick('app/profile')}
+                  className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 border border-[#E2E8F0] text-[10px] font-mono font-bold text-[#0B2346] uppercase flex items-center gap-1 cursor-pointer"
+                  title="Profile Dossier"
+                >
+                  <span>Dossier</span>
                 </button>
                 <button
                   onClick={logout}

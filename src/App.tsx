@@ -22,6 +22,7 @@ import { SchoolPage } from '@/pages/SchoolPage';
 
 // Authenticated app pages
 import { DashboardPage } from '@/pages/app/DashboardPage';
+import { ProfilePage } from '@/pages/app/ProfilePage';
 import { AppCommunityPage } from '@/pages/app/AppCommunityPage';
 import { AppSchoolPage } from '@/pages/app/AppSchoolPage';
 
@@ -216,6 +217,10 @@ function RouterOutlet() {
   switch (route) {
     case 'app':
       publicContent = <DashboardPage />;
+      break;
+    case 'app/profile':
+    case 'profile':
+      publicContent = <ProfilePage />;
       break;
     case 'app/community':
       publicContent = <AppCommunityPage />;

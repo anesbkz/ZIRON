@@ -13,7 +13,12 @@ import {
   Clock,
   Sparkles,
   Lock,
+  Edit3,
+  CheckCircle2,
+  AlertCircle,
+  MapPin,
 } from 'lucide-react';
+import { calculateProfileCompleteness, maskPhoneNumber } from '@/lib/validation/profileValidation';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, loading, isStaff } = useAuth();
@@ -46,47 +51,83 @@ export const DashboardPage: React.FC = () => {
     );
   }
 
+  const completeness = profile?.profileCompleteness ?? calculateProfileCompleteness(profile);
+
   return (
     <div className="py-10 bg-[#F5F7FA]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Profile Card */}
-        <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 relative overflow-hidden">
+        <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 relative overflow-hidden shadow-sm">
           <GridPattern />
           <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div>
-              <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider mb-2">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider">
                 <User className="w-3.5 h-3.5" />
                 SUBJECT DOSSIER
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346]">
-                {profile?.displayName || 'Participant'}
+                {profile?.firstName && profile?.lastName
+                  ? `${profile.firstName} ${profile.lastName}`
+                  : profile?.displayName || 'Participant'}
               </h1>
-              <p className="text-xs font-mono text-gray-500 mt-1">
-                {user.email} • UID: {user.uid.slice(0, 16)}...
-              </p>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                <span className="font-mono">{user.email}</span>
+                {profile?.country && (
+                  <span className="inline-flex items-center gap-1 font-medium">
+                    <MapPin className="w-3 h-3 text-gray-400" />
+                    {profile.country}{profile.wilaya ? ` • ${profile.wilaya}` : ''}
+                  </span>
+                )}
+                {user.emailVerified ? (
+                  <span className="inline-flex items-center gap-0.5 text-emerald-700 text-[10px] font-bold">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Email Verified
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 text-amber-700 text-[10px] font-bold">
+                    <AlertCircle className="w-3 h-3 text-amber-600" />
+                    Email Verification Pending
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              {isStaff && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="p-3 bg-gray-50 border border-gray-100 min-w-[200px]">
+                <div className="flex items-center justify-between text-[11px] font-bold text-[#0B2346] mb-1">
+                  <span>Completeness</span>
+                  <span className="font-mono text-emerald-700">{completeness}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-600"
+                    style={{ width: `${completeness}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <Button
-                  onClick={() => navigate('admin')}
-                  variant="primary"
+                  onClick={() => navigate('app/profile')}
+                  variant="outline"
                   size="sm"
-                  className="bg-[#0B2346] cursor-pointer"
+                  className="cursor-pointer inline-flex items-center gap-1.5"
                 >
-                  <Shield className="w-4 h-4 mr-1.5" />
-                  Staff Command Center
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Profile Dossier</span>
                 </Button>
-              )}
-              <Button
-                onClick={() => navigate('verify')}
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-              >
-                <QrCode className="w-4 h-4 mr-1.5" />
-                Verify Container Code
-              </Button>
+                {isStaff && (
+                  <Button
+                    onClick={() => navigate('admin')}
+                    variant="primary"
+                    size="sm"
+                    className="bg-[#0B2346] cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Command Center</span>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>

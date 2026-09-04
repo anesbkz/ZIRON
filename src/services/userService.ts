@@ -10,9 +10,10 @@ import {
   limit,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { UserProfile } from '@/types/models';
+import { UserProfile, CustomerRegistrationPayload, CustomerProfileUpdatePayload } from '@/types/models';
 import { AppRole } from '@/types/rbac';
 import { validateRoleTransition, isSuperAdmin, hasPermission } from '@/lib/rbac/permissions';
+import { calculateProfileCompleteness } from '@/lib/validation/profileValidation';
 
 export const BOOTSTRAP_SUPERADMIN_EMAIL = 'bkzboukhbiza@gmail.com';
 
@@ -23,7 +24,26 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     if (!snap.exists()) {
       return null;
     }
-    return snap.data() as UserProfile;
+    const data = snap.data() as UserProfile;
+    
+    // Lazy migration / backwards compatibility for existing user accounts
+    const completeness = data.profileCompleteness ?? calculateProfileCompleteness(data);
+    return {
+      ...data,
+      firstName: data.firstName || '',
+      lastName: data.lastName || '',
+      phone: data.phone || data.phoneNumber || '',
+      phoneNumber: data.phoneNumber || data.phone || '',
+      country: data.country || '',
+      wilaya: data.wilaya || '',
+      city: data.city || '',
+      address: data.address || '',
+      preferredLanguage: data.preferredLanguage || (data.locale as 'ar' | 'fr' | 'en') || 'en',
+      profilePhotoUrl: data.profilePhotoUrl ?? data.photoURL ?? null,
+      emailVerified: data.emailVerified ?? false,
+      phoneVerified: data.phoneVerified ?? false,
+      profileCompleteness: completeness,
+    };
   } catch (error) {
     console.error(`Error getting user profile for ${uid}:`, error);
     return null;
@@ -34,18 +54,51 @@ export async function createInitialUserProfile(
   uid: string,
   email: string,
   displayName: string,
-  initialRoles: AppRole[] = ['CUSTOMER']
+  initialRoles: AppRole[] = ['CUSTOMER'],
+  registrationData?: Partial<CustomerRegistrationPayload>
 ): Promise<UserProfile> {
   const now = new Date().toISOString();
   const isBootstrap = email.toLowerCase() === BOOTSTRAP_SUPERADMIN_EMAIL.toLowerCase();
 
-  // Client creates base profile conforming to Firestore rule constraints
+  const firstName = registrationData?.firstName?.trim() || '';
+  const lastName = registrationData?.lastName?.trim() || '';
+  const calculatedDisplayName = displayName || 
+    (firstName && lastName ? `${firstName} ${lastName}` : '') || 
+    email.split('@')[0];
+
+  const phone = registrationData?.phone?.trim() || '';
+  const country = registrationData?.country?.trim() || 'Algeria';
+  const wilaya = registrationData?.wilaya?.trim() || '';
+  const city = registrationData?.city?.trim() || '';
+  const address = registrationData?.address?.trim() || '';
+  const preferredLanguage = registrationData?.preferredLanguage || 'en';
+  const dateOfBirth = registrationData?.dateOfBirth?.trim() || '';
+  const termsAcceptedAt = registrationData?.agreeTerms ? now : null;
+  const privacyAcceptedAt = registrationData?.agreeTerms ? now : null;
+
+  // Base profile conforming strictly to Firestore rule constraints
   const profile: UserProfile = {
     uid,
     email,
-    displayName: displayName || email.split('@')[0],
+    displayName: calculatedDisplayName,
+    firstName,
+    lastName,
+    dateOfBirth,
+    phone,
+    phoneNumber: phone,
+    country,
+    wilaya,
+    city,
+    address,
+    preferredLanguage,
+    profilePhotoUrl: null,
     photoURL: '',
-    phoneNumber: '',
+    emailVerified: false,
+    phoneVerified: false,
+    termsAcceptedAt,
+    privacyAcceptedAt,
+    termsVersion: '1.0',
+    privacyVersion: '1.0',
     status: 'active',
     roles: ['CUSTOMER'],
     createdAt: now,
@@ -55,8 +108,10 @@ export async function createInitialUserProfile(
     schoolAccess: false,
     xp: 0,
     level: 1,
-    locale: 'en',
+    locale: preferredLanguage,
   };
+
+  profile.profileCompleteness = calculateProfileCompleteness(profile);
 
   const userDocRef = doc(db, 'users', uid);
   await setDoc(userDocRef, profile);
@@ -85,13 +140,55 @@ export async function createInitialUserProfile(
 
 export async function updateSafeProfileFields(
   uid: string,
-  fields: Partial<Pick<UserProfile, 'displayName' | 'photoURL' | 'phoneNumber' | 'locale' | 'onboardingCompleted'>>
+  fields: CustomerProfileUpdatePayload,
+  currentProfile?: Partial<UserProfile>
 ): Promise<void> {
   const userDocRef = doc(db, 'users', uid);
-  await updateDoc(userDocRef, {
-    ...fields,
-    updatedAt: new Date().toISOString(),
-  });
+  const now = new Date().toISOString();
+
+  // Construct clean payload containing only permitted safe fields
+  const safeData: Record<string, unknown> = {
+    updatedAt: now,
+  };
+
+  if (fields.displayName !== undefined) safeData.displayName = fields.displayName.trim();
+  if (fields.firstName !== undefined) safeData.firstName = fields.firstName.trim();
+  if (fields.lastName !== undefined) safeData.lastName = fields.lastName.trim();
+  if (fields.dateOfBirth !== undefined) safeData.dateOfBirth = fields.dateOfBirth.trim();
+  if (fields.phone !== undefined) {
+    safeData.phone = fields.phone.trim();
+    safeData.phoneNumber = fields.phone.trim();
+  }
+  if (fields.phoneNumber !== undefined && safeData.phone === undefined) {
+    safeData.phone = fields.phoneNumber.trim();
+    safeData.phoneNumber = fields.phoneNumber.trim();
+  }
+  if (fields.country !== undefined) safeData.country = fields.country.trim();
+  if (fields.wilaya !== undefined) safeData.wilaya = fields.wilaya.trim();
+  if (fields.city !== undefined) safeData.city = fields.city.trim();
+  if (fields.address !== undefined) safeData.address = fields.address.trim();
+  if (fields.preferredLanguage !== undefined) {
+    safeData.preferredLanguage = fields.preferredLanguage;
+    safeData.locale = fields.preferredLanguage;
+  }
+  if (fields.profilePhotoUrl !== undefined) {
+    safeData.profilePhotoUrl = fields.profilePhotoUrl;
+    safeData.photoURL = fields.profilePhotoUrl || '';
+  }
+  if (fields.locale !== undefined && safeData.preferredLanguage === undefined) {
+    safeData.locale = fields.locale;
+  }
+  if (fields.onboardingCompleted !== undefined) {
+    safeData.onboardingCompleted = fields.onboardingCompleted;
+  }
+
+  // Update auto-calculated completeness score
+  if (currentProfile) {
+    const merged = { ...currentProfile, ...safeData };
+    safeData.profileCompleteness = calculateProfileCompleteness(merged);
+  }
+
+  await updateDoc(userDocRef, safeData);
 }
 
 /**

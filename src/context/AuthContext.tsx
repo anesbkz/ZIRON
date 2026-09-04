@@ -10,7 +10,7 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth } from '@/config/firebase';
-import { UserProfile } from '@/types/models';
+import { UserProfile, CustomerRegistrationPayload, CustomerProfileUpdatePayload } from '@/types/models';
 import { AppRole, AppPermission } from '@/types/rbac';
 import {
   aggregatePermissions,
@@ -24,6 +24,7 @@ import {
 import {
   getUserProfile,
   createInitialUserProfile,
+  updateSafeProfileFields,
 } from '@/services/userService';
 
 interface AuthContextType {
@@ -39,7 +40,8 @@ interface AuthContextType {
   hasAnyRole: (roles: AppRole[]) => boolean;
   hasPermission: (permission: AppPermission) => boolean;
   login: (email: string, pass: string) => Promise<void>;
-  register: (email: string, pass: string, name: string) => Promise<void>;
+  register: (payloadOrEmail: CustomerRegistrationPayload | string, pass?: string, name?: string) => Promise<void>;
+  updateProfileData: (data: CustomerProfileUpdatePayload) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   sendEmailVerificationLink: () => Promise<void>;
@@ -69,6 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           firebaseUser.displayName || ''
         );
       }
+      // Ensure email verification state mirrors Firebase Auth
+      p.emailVerified = firebaseUser.emailVerified;
       setProfile(p);
       return p;
     } catch (error) {
@@ -88,6 +92,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         xp: 0,
         level: 1,
         locale: 'en',
+        emailVerified: firebaseUser.emailVerified,
+        phoneVerified: false,
+        profileCompleteness: 15,
       };
       setProfile(fallback);
       return fallback;
@@ -118,15 +125,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (email: string, pass: string, name: string) => {
+  const register = async (
+    payloadOrEmail: CustomerRegistrationPayload | string,
+    pass?: string,
+    name?: string
+  ) => {
     setLoading(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, pass);
-      if (name) {
-        await updateProfile(cred.user, { displayName: name });
+      if (typeof payloadOrEmail === 'object') {
+        const p = payloadOrEmail;
+        const cred = await createUserWithEmailAndPassword(auth, p.email, p.password);
+        const displayName = `${p.firstName} ${p.lastName}`.trim();
+        if (displayName) {
+          await updateProfile(cred.user, { displayName });
+        }
+        await createInitialUserProfile(
+          cred.user.uid,
+          p.email,
+          displayName,
+          ['CUSTOMER'],
+          p
+        );
+        await loadUserProfile(cred.user);
+      } else {
+        const email = payloadOrEmail;
+        const password = pass || '';
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        if (name) {
+          await updateProfile(cred.user, { displayName: name });
+        }
+        await createInitialUserProfile(cred.user.uid, email, name || '');
+        await loadUserProfile(cred.user);
       }
-      await createInitialUserProfile(cred.user.uid, email, name);
-      await loadUserProfile(cred.user);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateProfileData = async (data: CustomerProfileUpdatePayload) => {
+    if (!user) throw new Error('User must be authenticated to update profile.');
+    setLoading(true);
+    try {
+      await updateSafeProfileFields(user.uid, data, profile || undefined);
+      // If name was updated, keep Firebase Auth displayName in sync
+      const newDisplayName = data.displayName || (data.firstName && data.lastName ? `${data.firstName} ${data.lastName}`.trim() : undefined);
+      if (newDisplayName && auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: newDisplayName });
+      }
+      await loadUserProfile(user);
     } finally {
       setLoading(false);
     }
@@ -176,6 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     hasPermission: (p: AppPermission) => checkPermission(profile, p),
     login,
     register,
+    updateProfileData,
     logout,
     resetPassword,
     sendEmailVerificationLink,

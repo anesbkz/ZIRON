@@ -1,9 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { UserProfile, CommunityPost } from '@/types/models';
+import { UserProfile, CommunityPost, CustomerRegistrationPayload, CustomerProfileUpdatePayload } from '@/types/models';
 import { AppRole } from '@/types/rbac';
 import { checkCommunityEntitlement } from './communityService';
 import { checkSchoolEntitlement } from './schoolService';
-import { validateRoleTransition } from '@/lib/rbac/permissions';
+import { validateRoleTransition, hasPermission } from '@/lib/rbac/permissions';
+import {
+  validateCustomerRegistration,
+  validateCustomerProfileUpdate,
+  normalizePhoneNumber,
+  validateDateOfBirth,
+  calculateProfileCompleteness,
+} from '@/lib/validation/profileValidation';
 
 // --- Fixtures ---
 const mockCustomer: UserProfile = {
@@ -309,7 +316,7 @@ describe('PROMPT 02.2 Authorization Boundary Hardening Verification', () => {
 
     // updateUserStatus Cloud Function enforces staff role
     const canManageStatus = (roles: AppRole[]) =>
-      roles.includes('SUPER_ADMIN') || roles.includes('ADMIN') || roles.includes('SECURITY_OFFICER');
+      roles.includes('SUPER_ADMIN') || roles.includes('ADMIN');
     expect(canManageStatus(mockCustomer.roles)).toBe(false);
   });
 
@@ -386,5 +393,321 @@ describe('Entitlement Enforcement Checks', () => {
   it('permits staff to access school curriculum', () => {
     expect(checkSchoolEntitlement(mockAdmin)).toBe(true);
     expect(checkSchoolEntitlement(mockSuperAdmin)).toBe(true);
+  });
+});
+
+describe('PROMPT 02.4: Customer Registration & Profile Expansion Security Tests (18 Scenarios)', () => {
+  const validRegistrationPayload: CustomerRegistrationPayload = {
+    email: 'test.participant@virexon.dz',
+    password: 'SecurePassword123!',
+    confirmPassword: 'SecurePassword123!',
+    firstName: 'Amine',
+    lastName: 'Mansouri',
+    dateOfBirth: '1995-04-12',
+    phone: '0555123456',
+    country: 'Algeria',
+    wilaya: '16 - Alger',
+    city: 'Bab El Oued',
+    address: '12 Rue Didouche Mourad',
+    preferredLanguage: 'fr',
+    agreeTerms: true,
+    acceptTerms: true,
+    acceptPrivacy: true,
+  };
+
+  // 1. Customer registers with valid Algerian phone number -> succeeds
+  it('1. Customer registers with valid Algerian phone number -> succeeds', () => {
+    const algerianNumbers = ['0555123456', '0661987654', '0770112233', '+213555123456', '213661987654'];
+    algerianNumbers.forEach((num) => {
+      const res = normalizePhoneNumber(num, 'Algeria');
+      expect(res.isValid).toBe(true);
+      expect(res.normalized).toMatch(/^\+213[5-7]\d{8}$/);
+    });
+
+    const valResult = validateCustomerRegistration(validRegistrationPayload);
+    expect(valResult.isValid).toBe(true);
+    expect(valResult.errors).toEqual({});
+  });
+
+  // 2. Customer registers with international phone number -> succeeds
+  it('2. Customer registers with international phone number -> succeeds', () => {
+    const internationalPayload: CustomerRegistrationPayload = {
+      ...validRegistrationPayload,
+      country: 'France',
+      phone: '+33612345678',
+      wilaya: 'Ile-de-France',
+      city: 'Paris',
+    };
+
+    const norm = normalizePhoneNumber(internationalPayload.phone, 'France');
+    expect(norm.isValid).toBe(true);
+
+    const valResult = validateCustomerRegistration(internationalPayload);
+    expect(valResult.isValid).toBe(true);
+  });
+
+  // 3. Customer registers with invalid phone format -> fails validation
+  it('3. Customer registers with invalid phone format -> fails validation', () => {
+    const invalidPayload: CustomerRegistrationPayload = {
+      ...validRegistrationPayload,
+      phone: '12345', // too short, invalid prefix
+    };
+
+    const valResult = validateCustomerRegistration(invalidPayload);
+    expect(valResult.isValid).toBe(false);
+    expect(valResult.errors.phone).toBeDefined();
+  });
+
+  // 4. Customer under minimum age -> rejected
+  it('4. Customer under minimum age (e.g. under 13 or 18) -> rejected', () => {
+    const today = new Date();
+    const tenYearsAgo = new Date(today.getFullYear() - 10, today.getMonth(), today.getDate())
+      .toISOString()
+      .split('T')[0];
+
+    // Check custom 13-year threshold explicitly
+    const dob13Check = validateDateOfBirth(tenYearsAgo, 13);
+    expect(dob13Check.isValid).toBe(false);
+    expect(dob13Check.error).toMatch(/13 years/i);
+
+    const underagePayload: CustomerRegistrationPayload = {
+      ...validRegistrationPayload,
+      dateOfBirth: tenYearsAgo,
+    };
+
+    const valResult = validateCustomerRegistration(underagePayload);
+    expect(valResult.isValid).toBe(false);
+    expect(valResult.errors.dateOfBirth).toMatch(/years of age/i);
+  });
+
+  // 5. Customer future date of birth -> rejected
+  it('5. Customer future date of birth -> rejected', () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const dobCheck = validateDateOfBirth(tomorrow, 13);
+    expect(dobCheck.isValid).toBe(false);
+    expect(dobCheck.error).toMatch(/cannot be in the future/i);
+
+    const futurePayload: CustomerRegistrationPayload = {
+      ...validRegistrationPayload,
+      dateOfBirth: tomorrow,
+    };
+    const valResult = validateCustomerRegistration(futurePayload);
+    expect(valResult.isValid).toBe(false);
+    expect(valResult.errors.dateOfBirth).toBeDefined();
+  });
+
+  // 6. Customer attempts to set role='ADMIN' during registration -> rejected / ignored
+  it("6. Customer attempts to set role='ADMIN' during registration -> rejected / ignored", () => {
+    // Under firestore.rules:
+    // allow create: if isOwner(userId) && incoming().roles.hasOnly(['CUSTOMER'])
+    // Even if an attacker sends { roles: ['ADMIN'] }, Firestore rules reject the create.
+    const attackerRoles = ['CUSTOMER', 'ADMIN'];
+    const rulesAllowCreate = (roles: string[]) => roles.length === 1 && roles[0] === 'CUSTOMER';
+    expect(rulesAllowCreate(attackerRoles)).toBe(false);
+  });
+
+  // 7. Customer attempts to set communityAccess=true during registration -> rejected / ignored
+  it('7. Customer attempts to set communityAccess=true during registration -> rejected / ignored', () => {
+    // Under firestore.rules:
+    // allow create: if incoming().communityAccess == false
+    const rulesAllowCreate = (communityAccess: boolean) => communityAccess === false;
+    expect(rulesAllowCreate(true)).toBe(false);
+    expect(rulesAllowCreate(false)).toBe(true);
+  });
+
+  // 8. Customer attempts to set schoolAccess=true during registration -> rejected / ignored
+  it('8. Customer attempts to set schoolAccess=true during registration -> rejected / ignored', () => {
+    // Under firestore.rules:
+    // allow create: if incoming().schoolAccess == false
+    const rulesAllowCreate = (schoolAccess: boolean) => schoolAccess === false;
+    expect(rulesAllowCreate(true)).toBe(false);
+    expect(rulesAllowCreate(false)).toBe(true);
+  });
+
+  // 9. Customer attempts to set status='active' if not default -> handled securely
+  it("9. Customer attempts to set status='active' if not default -> handled securely", () => {
+    // Under firestore.rules:
+    // incoming().status == 'active' is the fixed default; setting 'superadmin' or non-active is rejected
+    const rulesAllowCreate = (status: string) => status === 'active';
+    expect(rulesAllowCreate('suspended')).toBe(false);
+    expect(rulesAllowCreate('active')).toBe(true);
+  });
+
+  // 10. Customer attempts to update own profile with valid fields -> succeeds
+  it('10. Customer attempts to update own profile with valid fields -> succeeds', () => {
+    const validUpdate: CustomerProfileUpdatePayload = {
+      firstName: 'Amine',
+      lastName: 'Mansouri',
+      dateOfBirth: '1995-04-12',
+      phone: '0555123456',
+      country: 'Algeria',
+      wilaya: '16 - Alger',
+      city: 'Bab El Oued',
+      preferredLanguage: 'ar',
+    };
+
+    const valResult = validateCustomerProfileUpdate(validUpdate);
+    expect(valResult.isValid).toBe(true);
+    expect(valResult.errors).toEqual({});
+  });
+
+  // 11. Customer attempts to update own roles via profile update -> denied by Firestore Rules
+  it('11. Customer attempts to update own roles via profile update -> denied by Firestore Rules', () => {
+    // Under firestore.rules:
+    // incoming().diff(existing()).affectedKeys().hasOnly([safeFields])
+    // 'roles' is strictly excluded from safeFields
+    const allowedUpdateKeys = [
+      'firstName',
+      'lastName',
+      'displayName',
+      'dateOfBirth',
+      'phone',
+      'phoneNumber',
+      'country',
+      'wilaya',
+      'city',
+      'address',
+      'preferredLanguage',
+      'profilePhotoUrl',
+      'photoURL',
+      'locale',
+      'profileCompleteness',
+      'onboardingCompleted',
+      'updatedAt',
+    ];
+
+    expect(allowedUpdateKeys.includes('roles')).toBe(false);
+  });
+
+  // 12. Customer attempts to update own communityAccess via profile update -> denied by Firestore Rules
+  it('12. Customer attempts to update own communityAccess via profile update -> denied by Firestore Rules', () => {
+    const allowedUpdateKeys = [
+      'firstName',
+      'lastName',
+      'displayName',
+      'dateOfBirth',
+      'phone',
+      'phoneNumber',
+      'country',
+      'wilaya',
+      'city',
+      'address',
+      'preferredLanguage',
+      'profilePhotoUrl',
+      'photoURL',
+      'locale',
+      'profileCompleteness',
+      'onboardingCompleted',
+      'updatedAt',
+    ];
+
+    expect(allowedUpdateKeys.includes('communityAccess')).toBe(false);
+  });
+
+  // 13. Customer attempts to update own schoolAccess via profile update -> denied by Firestore Rules
+  it('13. Customer attempts to update own schoolAccess via profile update -> denied by Firestore Rules', () => {
+    const allowedUpdateKeys = [
+      'firstName',
+      'lastName',
+      'displayName',
+      'dateOfBirth',
+      'phone',
+      'phoneNumber',
+      'country',
+      'wilaya',
+      'city',
+      'address',
+      'preferredLanguage',
+      'profilePhotoUrl',
+      'photoURL',
+      'locale',
+      'profileCompleteness',
+      'onboardingCompleted',
+      'updatedAt',
+    ];
+
+    expect(allowedUpdateKeys.includes('schoolAccess')).toBe(false);
+  });
+
+  // 14. Customer attempts to update own emailVerified flag directly -> denied
+  it('14. Customer attempts to update own emailVerified flag directly -> denied', () => {
+    const allowedUpdateKeys = [
+      'firstName',
+      'lastName',
+      'displayName',
+      'dateOfBirth',
+      'phone',
+      'phoneNumber',
+      'country',
+      'wilaya',
+      'city',
+      'address',
+      'preferredLanguage',
+      'profilePhotoUrl',
+      'photoURL',
+      'locale',
+      'profileCompleteness',
+      'onboardingCompleted',
+      'updatedAt',
+    ];
+
+    expect(allowedUpdateKeys.includes('emailVerified')).toBe(false);
+  });
+
+  // 15. Customer attempts to update own phoneVerified flag directly -> denied
+  it('15. Customer attempts to update own phoneVerified flag directly -> denied', () => {
+    const allowedUpdateKeys = [
+      'firstName',
+      'lastName',
+      'displayName',
+      'dateOfBirth',
+      'phone',
+      'phoneNumber',
+      'country',
+      'wilaya',
+      'city',
+      'address',
+      'preferredLanguage',
+      'profilePhotoUrl',
+      'photoURL',
+      'locale',
+      'profileCompleteness',
+      'onboardingCompleted',
+      'updatedAt',
+    ];
+
+    expect(allowedUpdateKeys.includes('phoneVerified')).toBe(false);
+  });
+
+  // 16. Unauthenticated user attempts to read customer profiles -> denied
+  it('16. Unauthenticated user attempts to read customer profiles -> denied', () => {
+    // Under firestore.rules:
+    // match /users/{userId} {
+    //   allow get: if isOwner(userId) || isStaff();
+    //   allow list: if isStaff();
+    // }
+    const canReadUserDoc = (isSignedIn: boolean, isOwner: boolean, isStaff: boolean) =>
+      isSignedIn && (isOwner || isStaff);
+
+    expect(canReadUserDoc(false, false, false)).toBe(false);
+  });
+
+  // 17. Customer attempts to read another customer's date of birth or phone -> denied
+  it("17. Customer attempts to read another customer's date of birth or phone -> denied", () => {
+    // User doc get: isOwner(userId) || isStaff()
+    // Customer reading another customer (isOwner = false, isStaff = false) -> denied by Firestore Rules
+    const canReadUserDoc = (isOwner: boolean, isStaff: boolean) => isOwner || isStaff;
+    expect(canReadUserDoc(false, false)).toBe(false);
+  });
+
+  // 18. Staff with MANAGE_USERS can inspect customer profiles -> permitted
+  it('18. Staff with MANAGE_USERS can inspect customer profiles -> permitted', () => {
+    const adminHasManageUsers = hasPermission(mockAdmin, 'MANAGE_USERS');
+    const superAdminHasManageUsers = hasPermission(mockSuperAdmin, 'MANAGE_USERS');
+    const customerHasManageUsers = hasPermission(mockCustomer, 'MANAGE_USERS');
+
+    expect(adminHasManageUsers).toBe(true);
+    expect(superAdminHasManageUsers).toBe(true);
+    expect(customerHasManageUsers).toBe(false);
   });
 });

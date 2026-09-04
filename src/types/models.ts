@@ -6,8 +6,25 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
-  photoURL?: string;
-  phoneNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string; // Normalized YYYY-MM-DD
+  phone?: string;
+  phoneNumber?: string; // Backwards-compatible alias
+  country?: string;
+  wilaya?: string;
+  city?: string;
+  address?: string;
+  preferredLanguage?: 'ar' | 'fr' | 'en';
+  profilePhotoUrl?: string | null;
+  photoURL?: string; // Backwards-compatible alias
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  termsAcceptedAt?: string | null;
+  privacyAcceptedAt?: string | null;
+  termsVersion?: string;
+  privacyVersion?: string;
+  profileCompleteness?: number;
   status: UserStatus;
   roles: AppRole[];
   createdAt: string;
@@ -18,6 +35,44 @@ export interface UserProfile {
   xp: number;
   level: number;
   locale: string;
+}
+
+export interface CustomerRegistrationPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  dateOfBirth: string; // YYYY-MM-DD
+  phone: string;
+  country: string;
+  wilaya: string;
+  city: string;
+  address?: string;
+  preferredLanguage: 'ar' | 'fr' | 'en';
+  agreeTerms: boolean;
+  acceptTerms?: boolean;
+  acceptPrivacy?: boolean;
+  serialCode?: string;
+}
+
+export interface CustomerProfileUpdatePayload {
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
+  dateOfBirth?: string;
+  phone?: string;
+  phoneNumber?: string;
+  country?: string;
+  wilaya?: string;
+  city?: string;
+  address?: string;
+  preferredLanguage?: 'ar' | 'fr' | 'en';
+  profilePhotoUrl?: string | null;
+  photoURL?: string;
+  locale?: string;
+  onboardingCompleted?: boolean;
+  profileCompleteness?: number;
 }
 
 /* ==========================================================================
@@ -120,6 +175,7 @@ export interface CommunityAnnouncement {
   content: MultilingualText;
   isPinned: boolean;
   priority: 'NORMAL' | 'HIGH' | 'URGENT';
+  tags?: string[];
   authorId: string;
   authorName: string;
   createdAt: string;

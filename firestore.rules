@@ -104,20 +104,29 @@ service cloud.firestore {
       );
 
       // Profile updates: Only customer modifying own safe demographic fields.
-      // Roles, status, and entitlements CANNOT be modified directly by clients.
+      // Roles, status, entitlements, and verification flags CANNOT be modified directly by clients.
       // All administrative role updates MUST go through the authoritative assignUserRoles Cloud Function.
       allow update: if (
         isOwner(userId) &&
         incoming().diff(existing()).affectedKeys().hasOnly([
+          'firstName',
+          'lastName',
           'displayName',
-          'photoURL',
+          'dateOfBirth',
+          'phone',
           'phoneNumber',
+          'country',
+          'wilaya',
+          'city',
+          'address',
+          'preferredLanguage',
+          'profilePhotoUrl',
+          'photoURL',
           'locale',
+          'profileCompleteness',
           'onboardingCompleted',
           'updatedAt'
-        ]) &&
-        incoming().displayName is string &&
-        incoming().displayName.size() <= 100
+        ])
       );
 
       // Only Super Admin can hard delete a user document

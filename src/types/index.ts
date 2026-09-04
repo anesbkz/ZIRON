@@ -17,6 +17,8 @@ export type PublicRoute =
   | 'community'
   | 'school'
   | 'app'
+  | 'app/profile'
+  | 'profile'
   | 'app/community'
   | 'app/school'
   | 'admin'
