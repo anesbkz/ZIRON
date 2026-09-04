@@ -42,7 +42,7 @@ const mockAdmin: UserProfile = {
 const mockSuperAdmin: UserProfile = {
   ...mockCustomer,
   uid: 'super-789',
-  email: 'bkzboukhbiza@gmail.com',
+  email: 'superadmin.test@virexon-biosciences.com',
   displayName: 'Root Architect',
   roles: ['SUPER_ADMIN'],
 };

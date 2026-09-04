@@ -45,25 +45,41 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSuperAdmin() || (hasUserDoc() && getUserData().roles.hasAny(['ADMIN']));
+      return isSuperAdmin() ||
+             (hasUserDoc() && getUserData().roles.hasAny(['ADMIN'])) ||
+             (isSignedIn() && request.auth.token.keys().hasAny(['roles']) && request.auth.token.roles.hasAny(['ADMIN']));
     }
 
     function isStaff() {
-      return isSuperAdmin() || (hasUserDoc() && getUserData().roles.hasAny([
-        'SUPER_ADMIN',
-        'ADMIN',
-        'CONTENT_MANAGER',
-        'COMMUNITY_MANAGER',
-        'SCHOOL_MANAGER',
-        'PRODUCT_MANAGER',
-        'ORDER_MANAGER',
-        'SUPPORT',
-        'ANALYST'
-      ]));
+      return isSuperAdmin() ||
+             (hasUserDoc() && getUserData().roles.hasAny([
+               'SUPER_ADMIN',
+               'ADMIN',
+               'CONTENT_MANAGER',
+               'COMMUNITY_MANAGER',
+               'SCHOOL_MANAGER',
+               'PRODUCT_MANAGER',
+               'ORDER_MANAGER',
+               'SUPPORT',
+               'ANALYST'
+             ])) ||
+             (isSignedIn() && request.auth.token.keys().hasAny(['roles']) && request.auth.token.roles.hasAny([
+               'SUPER_ADMIN',
+               'ADMIN',
+               'CONTENT_MANAGER',
+               'COMMUNITY_MANAGER',
+               'SCHOOL_MANAGER',
+               'PRODUCT_MANAGER',
+               'ORDER_MANAGER',
+               'SUPPORT',
+               'ANALYST'
+             ]));
     }
 
     function hasStaffRole(allowedRoles) {
-      return isSuperAdmin() || (hasUserDoc() && getUserData().roles.hasAny(allowedRoles));
+      return isSuperAdmin() ||
+             (hasUserDoc() && getUserData().roles.hasAny(allowedRoles)) ||
+             (isSignedIn() && request.auth.token.keys().hasAny(['roles']) && request.auth.token.roles.hasAny(allowedRoles));
     }
 
     // Authoritative entitlement check against entitlements collection

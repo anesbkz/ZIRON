@@ -56,7 +56,7 @@ const mockAdmin: UserProfile = {
 const mockSuperAdmin: UserProfile = {
   ...mockCustomer,
   uid: 'super-789',
-  email: 'bkzboukhbiza@gmail.com',
+  email: 'superadmin.test@virexon-biosciences.com',
   displayName: 'Root Architect',
   roles: ['SUPER_ADMIN'],
 };
@@ -771,11 +771,11 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
   it('Scenario B: Customer Registration with bootstrap email creates standard CUSTOMER profile ONLY', async () => {
     const profile = await createInitialUserProfile(
       'bootstrap-candidate-uid',
-      'bkzboukhbiza@gmail.com',
+      'bootstrap.candidate@virexon-biosciences.com',
       'Root Candidate',
       ['CUSTOMER'],
       {
-        firstName: 'Boukhbiza',
+        firstName: 'Candidate',
         lastName: 'Architect',
         agreeTerms: true,
       }
@@ -863,7 +863,7 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
 
   // Scenario G: Bootstrap mode authorization (isBootstrapModeAuthorized) valid only under strict preconditions
   it('Scenario G: Bootstrap mode authorization (isBootstrapModeAuthorized) valid only under strict preconditions', () => {
-    const configuredServerBootstrapEmail = 'bkzboukhbiza@gmail.com';
+    const configuredServerBootstrapEmail = 'bootstrap.root@virexon-biosciences.com';
 
     const checkBootstrapAuth = (
       email: string,
@@ -879,10 +879,10 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
     };
 
     // 1. Valid bootstrap preconditions -> authorized
-    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, false, false)).toBe(true);
+    expect(checkBootstrapAuth('bootstrap.root@virexon-biosciences.com', true, false, false)).toBe(true);
 
     // 2. Unverified email -> rejected
-    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', false, false, false)).toBe(false);
+    expect(checkBootstrapAuth('bootstrap.root@virexon-biosciences.com', false, false, false)).toBe(false);
 
     // 3. Different email -> rejected
     expect(checkBootstrapAuth('other@example.com', true, false, false)).toBe(false);
@@ -894,7 +894,7 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
   // Scenario H: Dedicated bootstrap function (initializeBootstrapGovernance) promotes user to SUPER_ADMIN server-side
   it('Scenario H: Dedicated bootstrap function (initializeBootstrapGovernance) promotes user to SUPER_ADMIN server-side, sets governance, and logs audit', () => {
     const callerUid = 'root-bootstrap-uid';
-    const callerEmail = 'bkzboukhbiza@gmail.com';
+    const callerEmail = 'bootstrap.root@virexon-biosciences.com';
     const now = new Date().toISOString();
 
     // Simulated atomic batch operations performed by server Cloud Function
@@ -933,7 +933,7 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
 
   // Scenario I: Once bootstrap is completed (bootstrapCompleted: true), bootstrap mode is permanently disabled
   it('Scenario I: Once bootstrap is completed (bootstrapCompleted: true), bootstrap mode is permanently disabled', () => {
-    const configuredServerBootstrapEmail = 'bkzboukhbiza@gmail.com';
+    const configuredServerBootstrapEmail = 'bootstrap.root@virexon-biosciences.com';
 
     const checkBootstrapAuth = (
       email: string,
@@ -949,13 +949,13 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
     };
 
     // Calling bootstrap when governance has bootstrapCompleted: true -> rejected
-    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, true, false)).toBe(false);
-    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, true, true)).toBe(false);
+    expect(checkBootstrapAuth('bootstrap.root@virexon-biosciences.com', true, true, false)).toBe(false);
+    expect(checkBootstrapAuth('bootstrap.root@virexon-biosciences.com', true, true, true)).toBe(false);
   });
 
   // Scenario J: Once an active SUPER_ADMIN already exists, bootstrap mode is permanently disabled
   it('Scenario J: Once an active SUPER_ADMIN already exists, bootstrap mode is permanently disabled even if governance doc is missing', () => {
-    const configuredServerBootstrapEmail = 'bkzboukhbiza@gmail.com';
+    const configuredServerBootstrapEmail = 'bootstrap.root@virexon-biosciences.com';
 
     const checkBootstrapAuth = (
       email: string,
@@ -971,14 +971,14 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
     };
 
     // Even if bootstrapCompleted is false (e.g., legacy or corrupted governance doc), existing active SUPER_ADMIN closes the door
-    expect(checkBootstrapAuth('bkzboukhbiza@gmail.com', true, false, true)).toBe(false);
+    expect(checkBootstrapAuth('bootstrap.root@virexon-biosciences.com', true, false, true)).toBe(false);
   });
 
   // Scenario K: After bootstrap is complete, bootstrap email alone without SUPER_ADMIN in roles never grants administrative authority
   it('Scenario K: After bootstrap is complete, bootstrap email alone without SUPER_ADMIN in roles never grants administrative authority', () => {
     const userWithBootstrapEmailOnly: UserProfile = {
       ...mockCustomer,
-      email: 'bkzboukhbiza@gmail.com',
+      email: 'bootstrap.root@virexon-biosciences.com',
       roles: ['CUSTOMER'],
     };
 
