@@ -6,13 +6,14 @@ const db = admin.firestore();
 
 // Server-authoritative bootstrap identity configuration.
 // Sourced securely from environment variables or Firebase Functions runtime config.
-// Never exposed to client-side code.
-export function getBootstrapSuperAdminEmail(): string {
-  return (
+// Never hard-coded. Never exposed to client-side code.
+export function getBootstrapSuperAdminEmail(): string | null {
+  const email = (
     process.env.BOOTSTRAP_SUPERADMIN_EMAIL ||
     functions.config()?.system?.bootstrap_email ||
-    'bkzboukhbiza@gmail.com'
+    ''
   ).toLowerCase().trim();
+  return email || null;
 }
 
 /**
@@ -53,6 +54,10 @@ export async function isBootstrapModeAuthorized(
 ): Promise<boolean> {
   if (!callerEmail || !isEmailVerified) return false;
   const targetBootstrapEmail = getBootstrapSuperAdminEmail();
+  if (!targetBootstrapEmail) {
+    // If BOOTSTRAP_SUPERADMIN_EMAIL is not configured, fail safely. Never guess or use a fallback.
+    return false;
+  }
   if (callerEmail.toLowerCase().trim() !== targetBootstrapEmail) return false;
 
   try {
@@ -153,6 +158,14 @@ export const initializeBootstrapGovernance = functions.https.onCall(async (_data
   const callerUid = context.auth.uid;
   const callerEmail = context.auth.token.email || '';
   const isEmailVerified = context.auth.token.email_verified === true;
+
+  const targetBootstrapEmail = getBootstrapSuperAdminEmail();
+  if (!targetBootstrapEmail) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'System bootstrap configuration missing. BOOTSTRAP_SUPERADMIN_EMAIL environment variable is not configured.'
+    );
+  }
 
   const canBootstrap = await isBootstrapModeAuthorized(callerEmail, isEmailVerified);
   if (!canBootstrap) {

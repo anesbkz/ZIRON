@@ -77,7 +77,10 @@ export async function createInitialUserProfile(
   // Customer registration flow ALWAYS creates roles: ['CUSTOMER'] with safe defaults.
   // NEVER elevates privileges, NEVER assigns SUPER_ADMIN or ADMIN, NEVER grants
   // communityAccess or schoolAccess without product activation.
-  const profile: UserProfile = {
+  // Server-authoritative verification flags (emailVerified, phoneVerified) are excluded
+  // entirely from the client-created document. emailVerified is derived from Firebase Auth,
+  // and phoneVerified requires verified OTP workflow.
+  const docData = {
     uid,
     email,
     displayName: calculatedDisplayName,
@@ -93,14 +96,12 @@ export async function createInitialUserProfile(
     preferredLanguage,
     profilePhotoUrl: null,
     photoURL: '',
-    emailVerified: false,
-    phoneVerified: false,
     termsAcceptedAt,
     privacyAcceptedAt,
     termsVersion: '1.0',
     privacyVersion: '1.0',
-    status: 'active',
-    roles: ['CUSTOMER'],
+    status: 'active' as const,
+    roles: ['CUSTOMER'] as AppRole[],
     createdAt: now,
     updatedAt: now,
     onboardingCompleted: false,
@@ -109,12 +110,19 @@ export async function createInitialUserProfile(
     xp: 0,
     level: 1,
     locale: preferredLanguage,
+    profileCompleteness: 0,
   };
 
-  profile.profileCompleteness = calculateProfileCompleteness(profile);
+  docData.profileCompleteness = calculateProfileCompleteness(docData as unknown as UserProfile);
 
   const userDocRef = doc(db, 'users', uid);
-  await setDoc(userDocRef, profile);
+  await setDoc(userDocRef, docData);
+
+  const profile: UserProfile = {
+    ...docData,
+    emailVerified: false,
+    phoneVerified: false,
+  };
 
   return profile;
 }

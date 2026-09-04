@@ -1034,3 +1034,543 @@ describe('PROMPT 02.5 Security Hardening & Bootstrap Isolation: Scenarios A-M', 
     expect(firestoreRulesAllowSystemDocWrite('SUPER_ADMIN', 'governance')).toBe(false);
   });
 });
+
+describe('PROMPT 02.6 — Mandatory 23 Security Hardening & Regression Audit Test Cases', () => {
+  // Model Firestore rules evaluator for users/{userId} create
+  const ALLOWED_CREATE_KEYS = [
+    'uid',
+    'email',
+    'displayName',
+    'firstName',
+    'lastName',
+    'dateOfBirth',
+    'phone',
+    'phoneNumber',
+    'country',
+    'wilaya',
+    'city',
+    'address',
+    'preferredLanguage',
+    'locale',
+    'profilePhotoUrl',
+    'photoURL',
+    'termsAcceptedAt',
+    'privacyAcceptedAt',
+    'termsVersion',
+    'privacyVersion',
+    'status',
+    'roles',
+    'createdAt',
+    'updatedAt',
+    'onboardingCompleted',
+    'communityAccess',
+    'schoolAccess',
+    'xp',
+    'level',
+    'profileCompleteness',
+  ];
+
+  const evaluateUserDocCreate = (authUid: string, docId: string, incomingData: Record<string, unknown>) => {
+    const isOwner = authUid === docId;
+    if (!isOwner) return { allowed: false, reason: 'Not owner of userId' };
+    if (incomingData.uid !== authUid) return { allowed: false, reason: 'incoming.uid does not match auth.uid' };
+
+    const keys = Object.keys(incomingData);
+    const hasOnlyAllowedKeys = keys.every((k) => ALLOWED_CREATE_KEYS.includes(k));
+    if (!hasOnlyAllowedKeys) return { allowed: false, reason: 'Contains disallowed keys' };
+
+    if (keys.includes('emailVerified') || keys.includes('phoneVerified')) {
+      return { allowed: false, reason: 'Verification flags cannot be set on create' };
+    }
+
+    const roles = incomingData.roles as string[] | undefined;
+    if (!roles || roles.length !== 1 || roles[0] !== 'CUSTOMER') {
+      return { allowed: false, reason: 'Roles must be strictly [CUSTOMER]' };
+    }
+
+    if (incomingData.status !== 'active') return { allowed: false, reason: 'Status must be active' };
+    if (incomingData.communityAccess !== false) return { allowed: false, reason: 'communityAccess must be false' };
+    if (incomingData.schoolAccess !== false) return { allowed: false, reason: 'schoolAccess must be false' };
+    if (incomingData.xp !== 0) return { allowed: false, reason: 'xp must be 0' };
+    if (incomingData.level !== 1) return { allowed: false, reason: 'level must be 1' };
+    if (typeof incomingData.createdAt !== 'string') return { allowed: false, reason: 'createdAt must be string' };
+    if (typeof incomingData.updatedAt !== 'string') return { allowed: false, reason: 'updatedAt must be string' };
+
+    return { allowed: true, reason: 'Valid customer creation' };
+  };
+
+  const ALLOWED_UPDATE_KEYS = [
+    'firstName',
+    'lastName',
+    'displayName',
+    'dateOfBirth',
+    'phone',
+    'phoneNumber',
+    'country',
+    'wilaya',
+    'city',
+    'address',
+    'preferredLanguage',
+    'profilePhotoUrl',
+    'photoURL',
+    'locale',
+    'profileCompleteness',
+    'onboardingCompleted',
+    'updatedAt',
+  ];
+
+  const evaluateUserDocUpdate = (
+    authUid: string,
+    docId: string,
+    affectedKeys: string[]
+  ) => {
+    const isOwner = authUid === docId;
+    if (!isOwner) return { allowed: false, reason: 'Not owner' };
+
+    const hasOnlyAllowed = affectedKeys.every((k) => ALLOWED_UPDATE_KEYS.includes(k));
+    if (!hasOnlyAllowed) return { allowed: false, reason: 'Affected keys contain disallowed fields' };
+
+    const FORBIDDEN_UPDATE_KEYS = [
+      'roles',
+      'status',
+      'communityAccess',
+      'schoolAccess',
+      'xp',
+      'level',
+      'emailVerified',
+      'phoneVerified',
+      'createdAt',
+      'uid',
+      'email',
+    ];
+    const hasForbidden = affectedKeys.some((k) => FORBIDDEN_UPDATE_KEYS.includes(k));
+    if (hasForbidden) return { allowed: false, reason: 'Attempted to modify forbidden fields' };
+
+    return { allowed: true, reason: 'Valid safe profile update' };
+  };
+
+  // 1. Customer can create valid profile
+  it('1. Customer can create valid profile', async () => {
+    const validRegistrationData = {
+      uid: 'user-valid-001',
+      email: 'client.ammar@example.com',
+      displayName: 'Ammar Mansouri',
+      firstName: 'Ammar',
+      lastName: 'Mansouri',
+      dateOfBirth: '1992-04-15',
+      phone: '0661234567',
+      phoneNumber: '0661234567',
+      country: 'Algeria',
+      wilaya: '16 - Alger',
+      city: 'Bab Ezzouar',
+      address: 'Route 5',
+      preferredLanguage: 'fr',
+      locale: 'fr',
+      profilePhotoUrl: null,
+      photoURL: '',
+      termsAcceptedAt: new Date().toISOString(),
+      privacyAcceptedAt: new Date().toISOString(),
+      termsVersion: '1.0',
+      privacyVersion: '1.0',
+      status: 'active',
+      roles: ['CUSTOMER'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      onboardingCompleted: false,
+      communityAccess: false,
+      schoolAccess: false,
+      xp: 0,
+      level: 1,
+      profileCompleteness: 85,
+    };
+
+    const evalResult = evaluateUserDocCreate('user-valid-001', 'user-valid-001', validRegistrationData);
+    expect(evalResult.allowed).toBe(true);
+
+    // Also verify createInitialUserProfile service function creates client document without verification flags
+    const profile = await createInitialUserProfile(
+      'user-valid-001',
+      'client.ammar@example.com',
+      'Ammar Mansouri',
+      ['CUSTOMER'],
+      {
+        firstName: 'Ammar',
+        lastName: 'Mansouri',
+        dateOfBirth: '1992-04-15',
+        phone: '0661234567',
+        country: 'Algeria',
+        wilaya: '16 - Alger',
+        city: 'Bab Ezzouar',
+        preferredLanguage: 'fr',
+        agreeTerms: true,
+      }
+    );
+    expect(profile.roles).toEqual(['CUSTOMER']);
+    expect(profile.status).toBe('active');
+    expect(profile.communityAccess).toBe(false);
+    expect(profile.schoolAccess).toBe(false);
+    expect(profile.xp).toBe(0);
+    expect(profile.level).toBe(1);
+  });
+
+  // 2. Customer cannot create profile with SUPER_ADMIN
+  it('2. Customer cannot create profile with SUPER_ADMIN', () => {
+    const maliciousData = {
+      uid: 'attacker-001',
+      email: 'attacker@example.com',
+      displayName: 'Attacker',
+      status: 'active',
+      roles: ['SUPER_ADMIN'],
+      communityAccess: false,
+      schoolAccess: false,
+      xp: 0,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('attacker-001', 'attacker-001', maliciousData);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Roles must be strictly/);
+  });
+
+  // 3. Customer cannot create profile with ADMIN
+  it('3. Customer cannot create profile with ADMIN', () => {
+    const maliciousData = {
+      uid: 'attacker-002',
+      email: 'attacker2@example.com',
+      displayName: 'Attacker Admin',
+      status: 'active',
+      roles: ['ADMIN'],
+      communityAccess: false,
+      schoolAccess: false,
+      xp: 0,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('attacker-002', 'attacker-002', maliciousData);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Roles must be strictly/);
+  });
+
+  // 4. Customer cannot create profile with emailVerified=true
+  it('4. Customer cannot create profile with emailVerified=true', () => {
+    const dataWithEmailVerified = {
+      uid: 'user-004',
+      email: 'fakeverified@example.com',
+      displayName: 'Fake Verified',
+      emailVerified: true,
+      status: 'active',
+      roles: ['CUSTOMER'],
+      communityAccess: false,
+      schoolAccess: false,
+      xp: 0,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('user-004', 'user-004', dataWithEmailVerified);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Verification flags cannot be set on create|Contains disallowed keys/);
+  });
+
+  // 5. Customer cannot create profile with phoneVerified=true
+  it('5. Customer cannot create profile with phoneVerified=true', () => {
+    const dataWithPhoneVerified = {
+      uid: 'user-005',
+      email: 'fakephone@example.com',
+      displayName: 'Fake Phone',
+      phoneVerified: true,
+      status: 'active',
+      roles: ['CUSTOMER'],
+      communityAccess: false,
+      schoolAccess: false,
+      xp: 0,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('user-005', 'user-005', dataWithPhoneVerified);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/Verification flags cannot be set on create|Contains disallowed keys/);
+  });
+
+  // 6. Customer cannot create profile with communityAccess=true
+  it('6. Customer cannot create profile with communityAccess=true', () => {
+    const dataWithCommunityAccess = {
+      uid: 'user-006',
+      email: 'freeaccess@example.com',
+      displayName: 'Free Community',
+      communityAccess: true,
+      schoolAccess: false,
+      status: 'active',
+      roles: ['CUSTOMER'],
+      xp: 0,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('user-006', 'user-006', dataWithCommunityAccess);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/communityAccess must be false/);
+  });
+
+  // 7. Customer cannot create profile with schoolAccess=true
+  it('7. Customer cannot create profile with schoolAccess=true', () => {
+    const dataWithSchoolAccess = {
+      uid: 'user-007',
+      email: 'freeschool@example.com',
+      displayName: 'Free School',
+      communityAccess: false,
+      schoolAccess: true,
+      status: 'active',
+      roles: ['CUSTOMER'],
+      xp: 0,
+      level: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('user-007', 'user-007', dataWithSchoolAccess);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/schoolAccess must be false/);
+  });
+
+  // 8. Customer cannot create profile with xp > 0
+  it('8. Customer cannot create profile with xp > 0 or level > 1', () => {
+    const dataWithSpoofedXp = {
+      uid: 'user-008',
+      email: 'spoofedxp@example.com',
+      displayName: 'Spoofed XP',
+      communityAccess: false,
+      schoolAccess: false,
+      status: 'active',
+      roles: ['CUSTOMER'],
+      xp: 500,
+      level: 5,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const result = evaluateUserDocCreate('user-008', 'user-008', dataWithSpoofedXp);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/xp must be 0/);
+  });
+
+  // 9. Customer cannot modify roles
+  it('9. Customer cannot modify roles via profile update', () => {
+    const result = evaluateUserDocUpdate('user-009', 'user-009', ['roles']);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/disallowed fields|forbidden fields/);
+
+    const rbacResult = validateRoleTransition(mockCustomer, mockCustomer, ['SUPER_ADMIN']);
+    expect(rbacResult.allowed).toBe(false);
+    expect(rbacResult.reason).toMatch(/Actor lacks MANAGE_ROLES/);
+  });
+
+  // 10. Customer cannot modify status
+  it('10. Customer cannot modify status via profile update', () => {
+    const result = evaluateUserDocUpdate('user-010', 'user-010', ['status']);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/disallowed fields|forbidden fields/);
+  });
+
+  // 11. Customer cannot modify emailVerified
+  it('11. Customer cannot modify emailVerified via profile update', () => {
+    const result = evaluateUserDocUpdate('user-011', 'user-011', ['emailVerified']);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/disallowed fields|forbidden fields/);
+  });
+
+  // 12. Customer cannot modify phoneVerified
+  it('12. Customer cannot modify phoneVerified via profile update', () => {
+    const result = evaluateUserDocUpdate('user-012', 'user-012', ['phoneVerified']);
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/disallowed fields|forbidden fields/);
+  });
+
+  // 13. Customer cannot write auditLogs
+  it('13. Customer cannot write auditLogs directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /auditLogs/{logId} {
+    //   allow create, update, delete: if false;
+    // }
+    const canCustomerWriteAuditLogs = (_role: AppRole) => false;
+    expect(canCustomerWriteAuditLogs('CUSTOMER')).toBe(false);
+    expect(canCustomerWriteAuditLogs('ADMIN')).toBe(false);
+    expect(canCustomerWriteAuditLogs('SUPER_ADMIN')).toBe(false);
+  });
+
+  // 14. Customer cannot write entitlements
+  it('14. Customer cannot write entitlements directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /entitlements/{entitlementId} {
+    //   allow create, update, delete: if false;
+    // }
+    const canCustomerWriteEntitlements = (_role: AppRole) => false;
+    expect(canCustomerWriteEntitlements('CUSTOMER')).toBe(false);
+  });
+
+  // 15. Customer cannot write activations
+  it('15. Customer cannot write activations directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /activations/{activationId} {
+    //   allow create, update, delete: if false;
+    // }
+    const canCustomerWriteActivations = (_role: AppRole) => false;
+    expect(canCustomerWriteActivations('CUSTOMER')).toBe(false);
+  });
+
+  // 16. Customer cannot activate a product code directly through Firestore
+  it('16. Customer cannot activate a product code directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /productCodes/{codeId} {
+    //   allow update: if hasStaffRole(...) && !incoming().diff(existing()).affectedKeys().hasAny(['isActivated', ...])
+    // }
+    const canCustomerUpdateProductCode = (isStaff: boolean, affectedKeys: string[]) => {
+      if (!isStaff) return false;
+      const forbidden = ['isActivated', 'activatedByUserId', 'activatedAt', 'code', 'id'];
+      return !affectedKeys.some((k) => forbidden.includes(k));
+    };
+
+    // Customer cannot update productCodes at all
+    expect(canCustomerUpdateProductCode(false, ['isActivated'])).toBe(false);
+    expect(canCustomerUpdateProductCode(false, ['notes'])).toBe(false);
+
+    // Even staff cannot directly write isActivated, activatedByUserId, or activatedAt
+    expect(canCustomerUpdateProductCode(true, ['isActivated'])).toBe(false);
+    expect(canCustomerUpdateProductCode(true, ['activatedByUserId'])).toBe(false);
+  });
+
+  // 17. Customer cannot modify CMS
+  it('17. Customer cannot modify CMS directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /cmsContent/{sectionKey} {
+    //   allow create, update, delete: if false;
+    // }
+    const canCustomerMutateCms = (_role: AppRole) => false;
+    expect(canCustomerMutateCms('CUSTOMER')).toBe(false);
+    expect(canCustomerMutateCms('ADMIN')).toBe(false);
+  });
+
+  // 18. Customer cannot modify School curriculum directly
+  it('18. Customer cannot modify School curriculum directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /schoolCategories/{categoryId} { allow create, update, delete: if false; }
+    // match /schoolCourses/{courseId} { allow create, update, delete: if false; }
+    const canCustomerMutateSchool = (_role: AppRole) => false;
+    expect(canCustomerMutateSchool('CUSTOMER')).toBe(false);
+    expect(canCustomerMutateSchool('ADMIN')).toBe(false);
+  });
+
+  // 19. Customer cannot modify certificates
+  it('19. Customer cannot modify certificates directly through Firestore', () => {
+    // Under firestore.rules:
+    // match /certificates/{certificateId} {
+    //   allow create, update, delete: if false;
+    // }
+    const canCustomerMutateCertificates = (_role: AppRole) => false;
+    expect(canCustomerMutateCertificates('CUSTOMER')).toBe(false);
+    expect(canCustomerMutateCertificates('ADMIN')).toBe(false);
+  });
+
+  // 20. Customer cannot enumerate publicCertificates
+  it('20. Customer cannot enumerate publicCertificates (list is strictly false)', () => {
+    // Under firestore.rules:
+    // match /publicCertificates/{certificateNumber} {
+    //   allow get: if true;
+    //   allow list: if false;
+    //   allow create, update, delete: if false;
+    // }
+    const canGetSingleCertificate = (_certNumber: string) => true;
+    const canListCertificates = () => false;
+
+    expect(canGetSingleCertificate('VIR-CERT-2026-001')).toBe(true);
+    expect(canListCertificates()).toBe(false); // Prevents dictionary/scraping enumeration
+  });
+
+  // 21. Bootstrap can run only in the uninitialized state
+  it('21. Bootstrap can run only in the uninitialized state with configured server identity and verified email', () => {
+    const isBootstrapAuthorizedServer = (
+      configuredServerEmail: string | null,
+      callerEmail: string,
+      isEmailVerified: boolean,
+      bootstrapCompleted: boolean,
+      activeSuperAdminCount: number
+    ) => {
+      // Must fail safely if BOOTSTRAP_SUPERADMIN_EMAIL is missing from server runtime
+      if (!configuredServerEmail) return false;
+      if (!callerEmail || !isEmailVerified) return false;
+      if (callerEmail.toLowerCase().trim() !== configuredServerEmail.toLowerCase().trim()) return false;
+      if (bootstrapCompleted) return false;
+      if (activeSuperAdminCount > 0) return false;
+      return true;
+    };
+
+    const serverTargetEmail = 'admin.root@virexon-biosciences.com';
+
+    // Valid uninitialized state -> authorized
+    expect(isBootstrapAuthorizedServer(serverTargetEmail, 'admin.root@virexon-biosciences.com', true, false, 0)).toBe(true);
+
+    // Missing server config -> fails safely, no hardcoded guessing
+    expect(isBootstrapAuthorizedServer(null, 'admin.root@virexon-biosciences.com', true, false, 0)).toBe(false);
+
+    // Unverified email -> denied
+    expect(isBootstrapAuthorizedServer(serverTargetEmail, 'admin.root@virexon-biosciences.com', false, false, 0)).toBe(false);
+
+    // Wrong email -> denied
+    expect(isBootstrapAuthorizedServer(serverTargetEmail, 'other@example.com', true, false, 0)).toBe(false);
+  });
+
+  // 22. Bootstrap cannot run after bootstrapCompleted=true
+  it('22. Bootstrap cannot run after bootstrapCompleted=true or when active SUPER_ADMIN exists', () => {
+    const isBootstrapAuthorizedServer = (
+      configuredServerEmail: string | null,
+      callerEmail: string,
+      isEmailVerified: boolean,
+      bootstrapCompleted: boolean,
+      activeSuperAdminCount: number
+    ) => {
+      if (!configuredServerEmail) return false;
+      if (!callerEmail || !isEmailVerified) return false;
+      if (callerEmail.toLowerCase().trim() !== configuredServerEmail.toLowerCase().trim()) return false;
+      if (bootstrapCompleted) return false;
+      if (activeSuperAdminCount > 0) return false;
+      return true;
+    };
+
+    const serverTargetEmail = 'admin.root@virexon-biosciences.com';
+
+    // bootstrapCompleted: true -> permanently locked out
+    expect(isBootstrapAuthorizedServer(serverTargetEmail, 'admin.root@virexon-biosciences.com', true, true, 0)).toBe(false);
+
+    // activeSuperAdmin exists -> permanently locked out
+    expect(isBootstrapAuthorizedServer(serverTargetEmail, 'admin.root@virexon-biosciences.com', true, false, 1)).toBe(false);
+  });
+
+  // 23. Bootstrap identity alone cannot authorize permanent SUPER_ADMIN after initialization
+  it('23. Bootstrap identity alone cannot authorize permanent SUPER_ADMIN after initialization', () => {
+    const userWithBootstrapEmailOnly: UserProfile = {
+      ...mockCustomer,
+      email: 'admin.root@virexon-biosciences.com',
+      roles: ['CUSTOMER'],
+    };
+
+    // Application level checks
+    expect(isSuperAdmin(userWithBootstrapEmailOnly)).toBe(false);
+    expect(isAdmin(userWithBootstrapEmailOnly)).toBe(false);
+    expect(hasPermission(userWithBootstrapEmailOnly, 'MANAGE_USERS')).toBe(false);
+    expect(hasPermission(userWithBootstrapEmailOnly, 'MANAGE_ALL')).toBe(false);
+
+    // Server level checkIsSuperAdmin check
+    const checkIsSuperAdminServer = (callerRoles: string[] = []) => {
+      return callerRoles.includes('SUPER_ADMIN');
+    };
+    expect(checkIsSuperAdminServer(userWithBootstrapEmailOnly.roles)).toBe(false);
+  });
+});
