@@ -712,6 +712,8 @@ describe('PHASE 12 — COMMUNITY SECURITY & MODERATION', () => {
       await setDoc(doc(db, 'entitlements', 'entitled-cust_COMMUNITY_ACCESS'), {
         userId: 'entitled-cust',
         type: 'COMMUNITY_ACCESS',
+        entitlementType: 'COMMUNITY_ACCESS',
+        status: 'ACTIVE',
         active: true,
       });
       // Pre-seed an existing post
@@ -1216,6 +1218,275 @@ describe('PHASE 16 — CUSTOMER EXPERIENCE INTEGRATION & ACCESS CONTROL AUDIT', 
     await assertFails(
       updateDoc(doc(dbB, 'users', customerB), {
         schoolAccess: true,
+      })
+    );
+  });
+});
+
+describe('PHASE 17 — ENTITLEMENT STATUS AUTHORIZATION HARDENING & REGRESSION MATRIX', () => {
+  const custActive = 'cust-ent-active';
+  const custExpired = 'cust-ent-expired';
+  const custRevoked = 'cust-ent-revoked';
+  const custInactive = 'cust-ent-inactive';
+  const custWrongType = 'cust-ent-wrongtype';
+  const custNoEnt = 'cust-ent-noent';
+  const staffAdmin = 'staff-ent-admin';
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+
+      // Seed Customer Profiles
+      const seedUser = async (uid: string, roles: string[] = ['CUSTOMER'], extra = {}) => {
+        await setDoc(doc(db, 'users', uid), {
+          uid,
+          email: `${uid}@virexon-biosciences.com`,
+          displayName: `User ${uid}`,
+          firstName: 'First',
+          lastName: 'Last',
+          country: 'Algeria',
+          wilaya: '16 - Alger',
+          roles,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...extra,
+        });
+      };
+
+      await seedUser(custActive);
+      await seedUser(custExpired);
+      await seedUser(custRevoked);
+      await seedUser(custInactive);
+      await seedUser(custWrongType);
+      await seedUser(custNoEnt);
+      await seedUser(staffAdmin, ['ADMIN']);
+
+      // A. ACTIVE entitlement
+      await setDoc(doc(db, 'entitlements', `${custActive}_COMMUNITY_ACCESS`), {
+        id: `${custActive}_COMMUNITY_ACCESS`,
+        userId: custActive,
+        entitlementType: 'COMMUNITY_ACCESS',
+        status: 'ACTIVE',
+        grantedAt: new Date().toISOString(),
+      });
+
+      // B. EXPIRED entitlement
+      await setDoc(doc(db, 'entitlements', `${custExpired}_COMMUNITY_ACCESS`), {
+        id: `${custExpired}_COMMUNITY_ACCESS`,
+        userId: custExpired,
+        entitlementType: 'COMMUNITY_ACCESS',
+        status: 'EXPIRED',
+        grantedAt: new Date().toISOString(),
+      });
+
+      // C. REVOKED entitlement
+      await setDoc(doc(db, 'entitlements', `${custRevoked}_COMMUNITY_ACCESS`), {
+        id: `${custRevoked}_COMMUNITY_ACCESS`,
+        userId: custRevoked,
+        entitlementType: 'COMMUNITY_ACCESS',
+        status: 'REVOKED',
+        grantedAt: new Date().toISOString(),
+      });
+
+      // D. INACTIVE entitlement
+      await setDoc(doc(db, 'entitlements', `${custInactive}_COMMUNITY_ACCESS`), {
+        id: `${custInactive}_COMMUNITY_ACCESS`,
+        userId: custInactive,
+        entitlementType: 'COMMUNITY_ACCESS',
+        status: 'INACTIVE',
+        grantedAt: new Date().toISOString(),
+      });
+
+      // E. Wrong entitlement type (has SCHOOL_ACCESS but wants COMMUNITY_ACCESS)
+      await setDoc(doc(db, 'entitlements', `${custWrongType}_SCHOOL_ACCESS`), {
+        id: `${custWrongType}_SCHOOL_ACCESS`,
+        userId: custWrongType,
+        entitlementType: 'SCHOOL_ACCESS',
+        status: 'ACTIVE',
+        grantedAt: new Date().toISOString(),
+      });
+
+      // Seed baseline published post
+      await setDoc(doc(db, 'communityPosts', 'phase17-post-seed'), {
+        authorId: custActive,
+        title: 'Phase 17 Baseline Post',
+        body: 'Verified clinical notes.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+        createdAt: new Date().toISOString(),
+      });
+    });
+  });
+
+  // A. ACTIVE entitlement: Authenticated customer with status == 'ACTIVE' can access protected resource
+  it('A. ACTIVE entitlement: Authenticated customer with status == ACTIVE can create community post', async () => {
+    const db = testEnv.authenticatedContext(custActive).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: custActive,
+        title: 'Authorized Post by Active Customer',
+        body: 'Should succeed because entitlement status is ACTIVE.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // B. EXPIRED entitlement: Authenticated customer with status == 'EXPIRED' must NOT be able to access protected resource
+  it('B. EXPIRED entitlement: Customer with status == EXPIRED is denied access', async () => {
+    const db = testEnv.authenticatedContext(custExpired).firestore();
+    await assertFails(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: custExpired,
+        title: 'Post Attempt with Expired Entitlement',
+        body: 'Must fail authorization check.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // C. REVOKED entitlement: Authenticated customer with status == 'REVOKED' must NOT be able to access protected resource
+  it('C. REVOKED entitlement: Customer with status == REVOKED is denied access', async () => {
+    const db = testEnv.authenticatedContext(custRevoked).firestore();
+    await assertFails(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: custRevoked,
+        title: 'Post Attempt with Revoked Entitlement',
+        body: 'Must fail authorization check.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // D. INACTIVE entitlement: Customer with status == 'INACTIVE' must be denied
+  it('D. INACTIVE entitlement: Customer with status == INACTIVE is denied access', async () => {
+    const db = testEnv.authenticatedContext(custInactive).firestore();
+    await assertFails(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: custInactive,
+        title: 'Post Attempt with Inactive Entitlement',
+        body: 'Must fail authorization check.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // E. Wrong entitlement type: Customer with SCHOOL_ACCESS must not gain COMMUNITY_ACCESS
+  it('E. Wrong entitlement type: Customer with SCHOOL_ACCESS cannot create community posts', async () => {
+    const db = testEnv.authenticatedContext(custWrongType).firestore();
+    await assertFails(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: custWrongType,
+        title: 'Post Attempt with Wrong Entitlement Type',
+        body: 'Should fail because user only holds SCHOOL_ACCESS.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // F. Missing entitlement: Customer without the entitlement must be denied
+  it('F. Missing entitlement: Customer with no entitlement record is denied access', async () => {
+    const db = testEnv.authenticatedContext(custNoEnt).firestore();
+    await assertFails(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: custNoEnt,
+        title: 'Post Attempt with No Entitlement',
+        body: 'Must fail authorization check.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // G. Staff bypass: Valid staff user retains access according to existing authorization model
+  it('G. Staff bypass: Staff user without customer entitlement can create community post', async () => {
+    const db = testEnv.authenticatedContext(staffAdmin).firestore();
+    await assertSucceeds(
+      addDoc(collection(db, 'communityPosts'), {
+        authorId: staffAdmin,
+        title: 'Staff Administrative Announcement',
+        body: 'Staff bypasses customer entitlement requirements.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // H. Cross-account entitlement: User A must never be able to use User B's entitlement
+  it('H. Cross-account entitlement: Customer cannot forge authorId to use another customer entitlement', async () => {
+    const dbNoEnt = testEnv.authenticatedContext(custNoEnt).firestore();
+    await assertFails(
+      addDoc(collection(dbNoEnt, 'communityPosts'), {
+        authorId: custActive,
+        title: 'Impersonated Post Attempt',
+        body: 'Should fail authorId == request.auth.uid boundary.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  // I. Client mutation: Customers cannot create, modify, or delete entitlement documents directly
+  it('I. Client mutation: Customer cannot directly create or delete entitlement documents', async () => {
+    const db = testEnv.authenticatedContext(custActive).firestore();
+    await assertFails(
+      setDoc(doc(db, 'entitlements', `${custActive}_NEW_PERK`), {
+        id: `${custActive}_NEW_PERK`,
+        userId: custActive,
+        entitlementType: 'NEW_PERK',
+        status: 'ACTIVE',
+      })
+    );
+    await assertFails(
+      deleteDoc(doc(db, 'entitlements', `${custActive}_COMMUNITY_ACCESS`))
+    );
+  });
+
+  // J. Status tampering: Customers cannot change entitlement from EXPIRED -> ACTIVE or REVOKED -> ACTIVE
+  it('J. Status tampering: Customer cannot update status from EXPIRED or REVOKED to ACTIVE', async () => {
+    const dbExp = testEnv.authenticatedContext(custExpired).firestore();
+    await assertFails(
+      updateDoc(doc(dbExp, 'entitlements', `${custExpired}_COMMUNITY_ACCESS`), {
+        status: 'ACTIVE',
+      })
+    );
+
+    const dbRev = testEnv.authenticatedContext(custRevoked).firestore();
+    await assertFails(
+      updateDoc(doc(dbRev, 'entitlements', `${custRevoked}_COMMUNITY_ACCESS`), {
+        status: 'ACTIVE',
       })
     );
   });

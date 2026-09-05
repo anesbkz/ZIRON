@@ -57,10 +57,10 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
 
   const hasActivatedProduct = activations.length > 0;
   
-  // High-reliability check: Staff bypass OR Profile flag hint OR authoritative active entitlement record
+  // Authoritative entitlement check: Staff bypass OR authoritative ACTIVE entitlement document.
+  // Profile flags (communityAccess, schoolAccess) are denormalized UI cache hints and do NOT grant independent authorization.
   const hasCommunityAccess = Boolean(
     isStaff ||
-    profile?.communityAccess ||
     entitlements.some(
       (e) => e.entitlementType === 'COMMUNITY_ACCESS' && e.status === 'ACTIVE'
     )
@@ -68,7 +68,6 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
 
   const hasSchoolAccess = Boolean(
     isStaff ||
-    profile?.schoolAccess ||
     entitlements.some(
       (e) => e.entitlementType === 'SCHOOL_ACCESS' && e.status === 'ACTIVE'
     )

@@ -31,7 +31,8 @@ export const AppSchoolPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(false);
 
-  const hasAccess = Boolean(isStaff || hasSchoolAccess || checkSchoolEntitlement(profile));
+  // Access requires staff bypass OR authoritative active SCHOOL_ACCESS entitlement
+  const hasAccess = Boolean(isStaff || hasSchoolAccess);
 
   useEffect(() => {
     async function loadCats() {

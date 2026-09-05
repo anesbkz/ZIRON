@@ -34,7 +34,8 @@ export const AppCommunityPage: React.FC = () => {
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const hasAccess = Boolean(isStaff || hasCommunityAccess || checkCommunityEntitlement(profile));
+  // Access requires staff bypass OR authoritative active COMMUNITY_ACCESS entitlement
+  const hasAccess = Boolean(isStaff || hasCommunityAccess);
 
   const loadFeed = async () => {
     setLoading(true);

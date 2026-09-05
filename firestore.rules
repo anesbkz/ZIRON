@@ -83,8 +83,23 @@ service cloud.firestore {
     }
 
     // Authoritative entitlement check against entitlements collection
+    // Must explicitly verify:
+    // 1. Authenticated user (request.auth != null)
+    // 2. Staff bypass OR:
+    // 3. Authoritative entitlement document exists
+    // 4. Entitlement belongs to request.auth.uid
+    // 5. Entitlement type matches requested entitlement type where schema supports it
+    // 6. Entitlement status is strictly "ACTIVE"
     function hasActiveEntitlement(type) {
-      return isStaff() || exists(/databases/$(database)/documents/entitlements/$(request.auth.uid + '_' + type));
+      let entPath = /databases/$(database)/documents/entitlements/$(request.auth.uid + '_' + type);
+      return isStaff() || (
+        isSignedIn() &&
+        exists(entPath) &&
+        (!('userId' in get(entPath).data) || get(entPath).data.userId == request.auth.uid) &&
+        (!('entitlementType' in get(entPath).data) || get(entPath).data.entitlementType == type) &&
+        (!('type' in get(entPath).data) || get(entPath).data.type == type) &&
+        get(entPath).data.get('status', '') == 'ACTIVE'
+      );
     }
 
     function hasCommunityEntitlement() {

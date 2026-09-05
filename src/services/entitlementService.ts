@@ -24,8 +24,7 @@ export async function getUserEntitlements(userId: string): Promise<EntitlementRe
   try {
     const q = query(
       collection(db, ENTITLEMENTS_COLLECTION),
-      where('userId', '==', userId),
-      where('status', '==', 'ACTIVE')
+      where('userId', '==', userId)
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({
