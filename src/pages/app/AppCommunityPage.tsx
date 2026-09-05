@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/design-system/Button';
 import { Input } from '@/components/design-system/Input';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import {
   MessageSquare,
   Lock,
@@ -21,8 +22,9 @@ import {
 } from 'lucide-react';
 
 export const AppCommunityPage: React.FC = () => {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, isStaff } = useAuth();
   const { navigate } = useI18n();
+  const { hasCommunityAccess } = useCustomerEntitlements();
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [announcements, setAnnouncements] = useState<CommunityAnnouncement[]>([]);
@@ -32,7 +34,7 @@ export const AppCommunityPage: React.FC = () => {
   const [body, setBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const hasAccess = checkCommunityEntitlement(profile);
+  const hasAccess = Boolean(isStaff || hasCommunityAccess || checkCommunityEntitlement(profile));
 
   const loadFeed = async () => {
     setLoading(true);

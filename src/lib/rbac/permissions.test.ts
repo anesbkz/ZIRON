@@ -88,6 +88,34 @@ describe('Role & Permission Aggregation Engine', () => {
     expect(hasPermission(mockCustomer, 'MANAGE_CMS')).toBe(false);
   });
 
+  it('correctly gates ACCESS_COMMUNITY and ACCESS_SCHOOL based on customer entitlement flags', () => {
+    // Unactivated customer
+    expect(hasPermission(mockCustomer, 'ACCESS_COMMUNITY')).toBe(false);
+    expect(hasPermission(mockCustomer, 'ACCESS_SCHOOL')).toBe(false);
+
+    // Customer with community entitlement
+    const commCustomer: UserProfile = { ...mockCustomer, communityAccess: true };
+    expect(hasPermission(commCustomer, 'ACCESS_COMMUNITY')).toBe(true);
+    expect(hasPermission(commCustomer, 'ACCESS_SCHOOL')).toBe(false);
+
+    // Customer with school entitlement
+    const schoolCustomer: UserProfile = { ...mockCustomer, schoolAccess: true };
+    expect(hasPermission(schoolCustomer, 'ACCESS_COMMUNITY')).toBe(false);
+    expect(hasPermission(schoolCustomer, 'ACCESS_SCHOOL')).toBe(true);
+
+    // Customer with both entitlements
+    const fullyEntitled: UserProfile = { ...mockCustomer, communityAccess: true, schoolAccess: true };
+    expect(hasPermission(fullyEntitled, 'ACCESS_COMMUNITY')).toBe(true);
+    expect(hasPermission(fullyEntitled, 'ACCESS_SCHOOL')).toBe(true);
+
+    // Entitled customer NEVER receives administrative or moderation privileges
+    expect(hasPermission(fullyEntitled, 'MANAGE_COMMUNITY')).toBe(false);
+    expect(hasPermission(fullyEntitled, 'MANAGE_SCHOOL')).toBe(false);
+    expect(hasPermission(fullyEntitled, 'MANAGE_USERS')).toBe(false);
+    expect(hasPermission(fullyEntitled, 'MANAGE_ROLES')).toBe(false);
+    expect(hasPermission(fullyEntitled, 'VIEW_AUDIT_LOGS')).toBe(false);
+  });
+
   it('aggregates permissions across multiple assigned roles without duplicates', () => {
     const multiRoleUser: UserProfile = {
       ...mockCustomer,

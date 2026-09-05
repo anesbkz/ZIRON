@@ -994,3 +994,229 @@ describe('PHASE 15 — RULES NEGATIVE FUZZING & FIELD INJECTION', () => {
     );
   });
 });
+
+describe('PHASE 16 — CUSTOMER EXPERIENCE INTEGRATION & ACCESS CONTROL AUDIT', () => {
+  const customerA = 'cust-audit-a';
+  const customerB = 'cust-audit-b';
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore();
+      // Seed Customer A
+      await setDoc(doc(db, 'users', customerA), {
+        uid: customerA,
+        email: 'customer.a@virexon-biosciences.com',
+        displayName: 'Customer Alpha',
+        firstName: 'Alpha',
+        lastName: 'Verified',
+        country: 'Algeria',
+        wilaya: '16 - Alger',
+        roles: ['CUSTOMER'],
+        status: 'active',
+        communityAccess: true,
+        schoolAccess: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      // Seed Customer B (Unentitled)
+      await setDoc(doc(db, 'users', customerB), {
+        uid: customerB,
+        email: 'customer.b@virexon-biosciences.com',
+        displayName: 'Customer Beta',
+        firstName: 'Beta',
+        lastName: 'Unverified',
+        country: 'Algeria',
+        wilaya: '31 - Oran',
+        roles: ['CUSTOMER'],
+        status: 'active',
+        communityAccess: false,
+        schoolAccess: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      // Seed Entitlements for Customer A
+      await setDoc(doc(db, 'entitlements', `${customerA}_COMMUNITY_ACCESS`), {
+        id: `${customerA}_COMMUNITY_ACCESS`,
+        userId: customerA,
+        entitlementType: 'COMMUNITY_ACCESS',
+        status: 'ACTIVE',
+        grantedAt: new Date().toISOString(),
+      });
+      await setDoc(doc(db, 'entitlements', `${customerA}_SCHOOL_ACCESS`), {
+        id: `${customerA}_SCHOOL_ACCESS`,
+        userId: customerA,
+        entitlementType: 'SCHOOL_ACCESS',
+        status: 'ACTIVE',
+        grantedAt: new Date().toISOString(),
+      });
+      // Seed Published & Unpublished Community Posts
+      await setDoc(doc(db, 'communityPosts', 'audit-post-published'), {
+        authorId: customerA,
+        title: 'Authoritative Published Observation',
+        body: 'Verified biological observations.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+        createdAt: new Date().toISOString(),
+      });
+      await setDoc(doc(db, 'communityPosts', 'audit-post-flagged'), {
+        authorId: customerA,
+        title: 'Flagged Content',
+        body: 'Under review.',
+        status: 'flagged',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+        createdAt: new Date().toISOString(),
+      });
+      // Seed Published & Draft School Courses
+      await setDoc(doc(db, 'schoolCourses', 'audit-course-live'), {
+        title: 'Certified Course',
+        isPublished: true,
+      });
+      await setDoc(doc(db, 'schoolCourses', 'audit-course-draft'), {
+        title: 'Draft Internal Curriculum',
+        isPublished: false,
+      });
+      // Seed Product Code & Audit Log
+      await setDoc(doc(db, 'productCodes', 'CODE-AUDIT-100'), {
+        code: 'CODE-AUDIT-100',
+        isActivated: false,
+      });
+      await setDoc(doc(db, 'auditLogs', 'audit-log-100'), {
+        action: 'SYSTEM_BOOTSTRAP',
+        timestamp: new Date().toISOString(),
+      });
+    });
+  });
+
+  it('1. CUSTOMER without COMMUNITY_ACCESS cannot create community posts', async () => {
+    const dbB = testEnv.authenticatedContext(customerB).firestore();
+    await assertFails(
+      addDoc(collection(dbB, 'communityPosts'), {
+        authorId: customerB,
+        title: 'Unauthorized Post Attempt',
+        body: 'Should be denied by rules.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  it('2. CUSTOMER with COMMUNITY_ACCESS can read authorized published community content and create posts', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertSucceeds(getDoc(doc(dbA, 'communityPosts', 'audit-post-published')));
+    await assertSucceeds(
+      addDoc(collection(dbA, 'communityPosts'), {
+        authorId: customerA,
+        title: 'Authorized Post Observation',
+        body: 'Compliant clinical discussion.',
+        status: 'published',
+        likesCount: 0,
+        commentsCount: 0,
+        isPinned: false,
+        isLocked: false,
+      })
+    );
+  });
+
+  it('3. CUSTOMER without staff role cannot read protected draft school curriculum', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertFails(getDoc(doc(dbA, 'schoolCourses', 'audit-course-draft')));
+  });
+
+  it('4. CUSTOMER can read authorized published school curriculum', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertSucceeds(getDoc(doc(dbA, 'schoolCourses', 'audit-course-live')));
+  });
+
+  it('5. CUSTOMER cannot read another customer private profile', async () => {
+    const dbB = testEnv.authenticatedContext(customerB).firestore();
+    await assertFails(getDoc(doc(dbB, 'users', customerA)));
+  });
+
+  it('6. CUSTOMER cannot modify another customer profile', async () => {
+    const dbB = testEnv.authenticatedContext(customerB).firestore();
+    await assertFails(
+      updateDoc(doc(dbB, 'users', customerA), {
+        firstName: 'Malicious Edit',
+      })
+    );
+  });
+
+  it('7. CUSTOMER cannot directly create or modify entitlements', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertFails(
+      setDoc(doc(dbA, 'entitlements', 'forged-entitlement'), {
+        userId: customerA,
+        entitlementType: 'UNLIMITED_ACCESS',
+        status: 'ACTIVE',
+      })
+    );
+    await assertFails(
+      updateDoc(doc(dbA, 'entitlements', `${customerA}_COMMUNITY_ACCESS`), {
+        status: 'REVOKED',
+      })
+    );
+  });
+
+  it('8. CUSTOMER cannot directly create or modify activations', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertFails(
+      setDoc(doc(dbA, 'activations', 'forged-act'), {
+        userId: customerA,
+        code: 'CODE-AUDIT-100',
+      })
+    );
+  });
+
+  it('9. CUSTOMER cannot directly create or modify audit logs', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertFails(
+      setDoc(doc(dbA, 'auditLogs', 'forged-log'), {
+        action: 'FORGED_LOG',
+      })
+    );
+    await assertFails(
+      updateDoc(doc(dbA, 'auditLogs', 'audit-log-100'), {
+        action: 'ALTERED',
+      })
+    );
+  });
+
+  it('10. CUSTOMER cannot access admin-only collections (/productCodes, /auditLogs, /_system)', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertFails(getDoc(doc(dbA, 'productCodes', 'CODE-AUDIT-100')));
+    await assertFails(getDoc(doc(dbA, 'auditLogs', 'audit-log-100')));
+    await assertFails(getDoc(doc(dbA, '_system', 'governance')));
+  });
+
+  it('11. CUSTOMER cannot manipulate their own roles', async () => {
+    const dbA = testEnv.authenticatedContext(customerA).firestore();
+    await assertFails(
+      updateDoc(doc(dbA, 'users', customerA), {
+        roles: ['ADMIN'],
+      })
+    );
+  });
+
+  it('12. CUSTOMER cannot manipulate communityAccess or schoolAccess flags on their own profile', async () => {
+    const dbB = testEnv.authenticatedContext(customerB).firestore();
+    await assertFails(
+      updateDoc(doc(dbB, 'users', customerB), {
+        communityAccess: true,
+      })
+    );
+    await assertFails(
+      updateDoc(doc(dbB, 'users', customerB), {
+        schoolAccess: true,
+      })
+    );
+  });
+});

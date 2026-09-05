@@ -18,7 +18,7 @@ export interface CustomerEntitlementState {
 }
 
 export function useCustomerEntitlements(): CustomerEntitlementState {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, isStaff } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
   const [activations, setActivations] = useState<ActivationRecord[]>([]);
   const [entitlements, setEntitlements] = useState<EntitlementRecord[]>([]);
@@ -57,8 +57,9 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
 
   const hasActivatedProduct = activations.length > 0;
   
-  // High-reliability check: Profile flag hint OR authoritative active entitlement record
+  // High-reliability check: Staff bypass OR Profile flag hint OR authoritative active entitlement record
   const hasCommunityAccess = Boolean(
+    isStaff ||
     profile?.communityAccess ||
     entitlements.some(
       (e) => e.entitlementType === 'COMMUNITY_ACCESS' && e.status === 'ACTIVE'
@@ -66,6 +67,7 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
   );
 
   const hasSchoolAccess = Boolean(
+    isStaff ||
     profile?.schoolAccess ||
     entitlements.some(
       (e) => e.entitlementType === 'SCHOOL_ACCESS' && e.status === 'ACTIVE'

@@ -9,6 +9,7 @@ import {
 } from '@/services/schoolService';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import {
   GraduationCap,
   Lock,
@@ -20,8 +21,9 @@ import {
 } from 'lucide-react';
 
 export const AppSchoolPage: React.FC = () => {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, isStaff } = useAuth();
   const { locale, navigate } = useI18n();
+  const { hasSchoolAccess } = useCustomerEntitlements();
 
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<SchoolCategory | null>(null);
@@ -29,7 +31,7 @@ export const AppSchoolPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(false);
 
-  const hasAccess = checkSchoolEntitlement(profile);
+  const hasAccess = Boolean(isStaff || hasSchoolAccess || checkSchoolEntitlement(profile));
 
   useEffect(() => {
     async function loadCats() {

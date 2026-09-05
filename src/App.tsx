@@ -212,7 +212,11 @@ function RouterOutlet() {
         break;
       case 'admin':
       default:
-        adminContent = <AdminDashboardPage />;
+        adminContent = (
+          <AdminRouteGuard>
+            <AdminDashboardPage />
+          </AdminRouteGuard>
+        );
         break;
     }
 
