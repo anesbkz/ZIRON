@@ -137,20 +137,20 @@ export const AppSchoolPage: React.FC = () => {
 
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button
-                  onClick={() => navigate('verify')}
+                  onClick={() => navigate('app/products/activate')}
                   variant="primary"
                   size="md"
-                  className="flex-1"
+                  className="flex-1 cursor-pointer"
                 >
-                  Verify Container Code
+                  Activate Product Code
                 </Button>
                 <Button
-                  onClick={() => navigate('school')}
+                  onClick={() => navigate('app')}
                   variant="outline"
                   size="md"
-                  className="flex-1"
+                  className="flex-1 cursor-pointer"
                 >
-                  Curriculum Overview
+                  Back to Dashboard
                 </Button>
               </div>
             </div>

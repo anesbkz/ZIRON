@@ -3,6 +3,7 @@ import { I18nProvider, useI18n } from '@/context/I18nContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { PublicShell } from '@/components/shells/PublicShell';
 import { AdminShell } from '@/components/shells/AdminShell';
+import { CustomerAppShell } from '@/components/shells/CustomerAppShell';
 
 // Public pages
 import { HomePage } from '@/pages/HomePage';
@@ -22,9 +23,15 @@ import { SchoolPage } from '@/pages/SchoolPage';
 
 // Authenticated app pages
 import { DashboardPage } from '@/pages/app/DashboardPage';
+import { JourneyPage } from '@/pages/app/JourneyPage';
+import { ProductsPage } from '@/pages/app/ProductsPage';
+import { ActivateProductPage } from '@/pages/app/ActivateProductPage';
 import { ProfilePage } from '@/pages/app/ProfilePage';
 import { AppCommunityPage } from '@/pages/app/AppCommunityPage';
 import { AppSchoolPage } from '@/pages/app/AppSchoolPage';
+import { RewardsPage } from '@/pages/app/RewardsPage';
+import { CertificatesPage } from '@/pages/app/CertificatesPage';
+import { CustomerRouteGuard } from '@/components/guards/CustomerRouteGuard';
 
 // Admin pages
 import { AdminDashboardPage } from '@/pages/admin/AdminDashboardPage';
@@ -212,21 +219,88 @@ function RouterOutlet() {
     return <AdminShell>{adminContent}</AdminShell>;
   }
 
-  // Public and app routes routed through PublicShell
+  // Customer application routes routed through CustomerAppShell
+  if (route.startsWith('app')) {
+    let appContent: React.ReactNode;
+    switch (route) {
+      case 'app/journey':
+        appContent = (
+          <CustomerRouteGuard>
+            <JourneyPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/products':
+        appContent = (
+          <CustomerRouteGuard>
+            <ProductsPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/products/activate':
+        appContent = (
+          <CustomerRouteGuard>
+            <ActivateProductPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/community':
+        appContent = (
+          <CustomerRouteGuard requiredEntitlement="COMMUNITY_ACCESS">
+            <AppCommunityPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/school':
+        appContent = (
+          <CustomerRouteGuard requiredEntitlement="SCHOOL_ACCESS">
+            <AppSchoolPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/rewards':
+        appContent = (
+          <CustomerRouteGuard>
+            <RewardsPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/certificates':
+        appContent = (
+          <CustomerRouteGuard>
+            <CertificatesPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/profile':
+        appContent = (
+          <CustomerRouteGuard>
+            <ProfilePage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app':
+      default:
+        appContent = (
+          <CustomerRouteGuard>
+            <DashboardPage />
+          </CustomerRouteGuard>
+        );
+        break;
+    }
+
+    return <CustomerAppShell>{appContent}</CustomerAppShell>;
+  }
+
+  // Public routes routed through PublicShell
   let publicContent: React.ReactNode;
   switch (route) {
-    case 'app':
-      publicContent = <DashboardPage />;
-      break;
-    case 'app/profile':
     case 'profile':
-      publicContent = <ProfilePage />;
-      break;
-    case 'app/community':
-      publicContent = <AppCommunityPage />;
-      break;
-    case 'app/school':
-      publicContent = <AppSchoolPage />;
+      publicContent = (
+        <CustomerRouteGuard>
+          <ProfilePage />
+        </CustomerRouteGuard>
+      );
       break;
     case 'community':
       publicContent = <CommunityPage />;

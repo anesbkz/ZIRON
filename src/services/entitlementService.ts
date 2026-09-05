@@ -14,6 +14,7 @@ import {
 } from '@/types/entitlements';
 
 const ENTITLEMENTS_COLLECTION = 'entitlements';
+const ACTIVATIONS_COLLECTION = 'activations';
 
 /**
  * Lists all verified entitlements for a given user.
@@ -33,6 +34,27 @@ export async function getUserEntitlements(userId: string): Promise<EntitlementRe
     }));
   } catch (error) {
     console.warn(`Could not load entitlements for user ${userId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Lists all verified product container activations for a given user.
+ * Queries the authoritative `activations` collection.
+ */
+export async function getUserActivations(userId: string): Promise<ActivationRecord[]> {
+  try {
+    const q = query(
+      collection(db, ACTIVATIONS_COLLECTION),
+      where('userId', '==', userId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...(d.data() as Omit<ActivationRecord, 'id'>),
+    }));
+  } catch (error) {
+    console.warn(`Could not load activations for user ${userId}:`, error);
     return [];
   }
 }
