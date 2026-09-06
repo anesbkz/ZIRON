@@ -269,6 +269,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
               return (
                 <button
                   key={item.id}
+                  id={`customer-nav-desktop-${item.id.replace(/\//g, '-')}`}
                   onClick={() => handleNav(item.id)}
                   className={`px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 cursor-pointer relative ${
                     isActive
@@ -294,6 +295,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
           {/* Right User Dossier & Actions */}
           <div className="hidden lg:flex items-center gap-3">
             <button
+              id="customer-profile-dossier-btn"
               onClick={() => handleNav('app/profile')}
               className="flex items-center gap-2 p-1.5 pl-2.5 bg-gray-50 border border-[#E2E8F0] hover:border-gray-300 text-left transition-colors cursor-pointer"
             >
@@ -311,6 +313,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
             </button>
 
             <button
+              id="customer-logout-btn"
               onClick={handleLogout}
               className="p-2 text-gray-400 hover:text-[#D62828] hover:bg-red-50 border border-[#E2E8F0] transition-colors cursor-pointer"
               title="Logout"
@@ -322,6 +325,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
           {/* Mobile Menu Toggle */}
           <div className="flex lg:hidden items-center gap-2">
             <button
+              id="customer-mobile-menu-toggle-btn"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="p-2 border border-[#E2E8F0] text-[#0B2346] hover:bg-gray-100 cursor-pointer"
               aria-label="Toggle navigation menu"
@@ -367,6 +371,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
                 return (
                   <button
                     key={item.id}
+                    id={`customer-nav-mobile-${item.id.replace(/\//g, '-')}`}
                     onClick={() => handleNav(item.id)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer text-left ${
                       isActive
