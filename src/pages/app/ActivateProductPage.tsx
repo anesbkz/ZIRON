@@ -5,24 +5,25 @@ import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { activateProductCode } from '@/services/entitlementService';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   QrCode,
   Shield,
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Lock,
   ArrowRight,
+  ArrowLeft,
   Package,
   MessageSquare,
   GraduationCap,
-  Sparkles,
 } from 'lucide-react';
 
 export const ActivateProductPage: React.FC = () => {
-  const { user, profile } = useAuth();
-  const { navigate } = useI18n();
-  const { refresh } = useCustomerEntitlements();
+  const { profile } = useAuth();
+  const { locale, dir, navigate } = useI18n();
+  const t = getAppTranslations(locale);
+  const { refresh, qualifyingContainerCount } = useCustomerEntitlements();
 
   const [code, setCode] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -40,12 +41,12 @@ export const ActivateProductPage: React.FC = () => {
 
     const cleanCode = code.trim().toUpperCase();
     if (!cleanCode) {
-      setErrorMsg('Please enter a valid product verification code.');
+      setErrorMsg(t.activate.invalidCodeError);
       return;
     }
 
     if (!profile) {
-      setErrorMsg('Your user profile could not be loaded. Please re-authenticate.');
+      setErrorMsg(t.shell.authRequiredDesc);
       return;
     }
 
@@ -65,13 +66,13 @@ export const ActivateProductPage: React.FC = () => {
       await refresh();
     } catch (err: unknown) {
       const error = err as { message?: string };
-      const rawMessage = error.message || 'Product activation failed.';
+      const rawMessage = error.message || 'Activation failed';
       
       // Categorize common server-authoritative error conditions
       if (rawMessage.toLowerCase().includes('already activated') || rawMessage.toLowerCase().includes('already been activated')) {
-        setErrorMsg('This container code has already been activated and cannot be reused.');
+        setErrorMsg(t.activate.alreadyActivatedError);
       } else if (rawMessage.toLowerCase().includes('not found') || rawMessage.toLowerCase().includes('invalid')) {
-        setErrorMsg('Invalid container code. Please check the alphanumeric characters on your container seal and try again.');
+        setErrorMsg(t.activate.invalidCodeError);
       } else {
         setErrorMsg(rawMessage);
       }
@@ -88,14 +89,14 @@ export const ActivateProductPage: React.FC = () => {
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-white border border-[#E2E8F0] shadow-xs">
             <Shield className="w-3.5 h-3.5 text-[#0B2346]" />
             <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0B2346]">
-              CRYPTOGRAPHIC TAMPER-SEAL VERIFICATION
+              {t.activate.tamperSealBadge}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346] tracking-tight">
-            Activate ZIRON Product
+            {t.activate.title}
           </h1>
           <p className="text-xs sm:text-sm text-gray-600 max-w-lg mx-auto leading-relaxed">
-            Link your physical ZIRON 30-capsule container to your verified participant dossier to unlock full community and educational privileges.
+            {t.activate.subtitle}
           </p>
         </div>
 
@@ -109,19 +110,20 @@ export const ActivateProductPage: React.FC = () => {
               <div className="space-y-3 flex-1">
                 <div>
                   <span className="text-[10px] font-mono uppercase font-bold text-emerald-700 block mb-0.5">
-                    ACTIVATION SUCCESSFUL
+                    {t.activate.successBadge}
                   </span>
                   <h2 className="text-xl font-black text-[#0B2346]">
-                    Container Verified & Linked
+                    {t.activate.successTitle}
                   </h2>
                   <p className="text-xs text-gray-600 mt-1 leading-relaxed">
-                    Code <span className="font-mono font-bold text-[#0B2346]">{successData.code}</span> has been permanently associated with your participant profile.
+                    {t.activate.successDesc}{' '}
+                    <span dir="ltr" className="font-mono font-bold text-[#0B2346]">{successData.code}</span>
                   </p>
                 </div>
 
                 <div className="p-3 bg-gray-50 border border-gray-200 space-y-2">
                   <div className="text-[10px] font-mono uppercase font-bold text-gray-500">
-                    Granted Authoritative Entitlements:
+                    {t.activate.grantedEntitlements}:
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5">
@@ -130,7 +132,7 @@ export const ActivateProductPage: React.FC = () => {
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold bg-blue-100 text-blue-800 px-2 py-0.5">
                       <GraduationCap className="w-3 h-3 text-[#0B2346]" />
-                      SCHOOL_ACCESS
+                      SCHOOL_ACCESS ({Math.min(qualifyingContainerCount, 3)}/3)
                     </span>
                   </div>
                 </div>
@@ -142,16 +144,20 @@ export const ActivateProductPage: React.FC = () => {
                     size="md"
                     className="cursor-pointer inline-flex items-center justify-center gap-1.5"
                   >
-                    <span>Go to Dashboard</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <span>{t.activate.goToDashboardBtn}</span>
+                    {dir === 'rtl' ? (
+                      <ArrowLeft className="w-4 h-4" />
+                    ) : (
+                      <ArrowRight className="w-4 h-4" />
+                    )}
                   </Button>
                   <Button
-                    onClick={() => navigate('app/journey')}
+                    onClick={() => navigate('app/community')}
                     variant="outline"
                     size="md"
                     className="cursor-pointer justify-center"
                   >
-                    View My Journey
+                    {t.activate.enterCommunityBtn}
                   </Button>
                 </div>
               </div>
@@ -169,20 +175,21 @@ export const ActivateProductPage: React.FC = () => {
                   htmlFor="product-activation-code-input"
                   className="block text-xs font-bold uppercase tracking-wider text-[#0B2346] mb-2"
                 >
-                  Enter Container Verification Code
+                  {t.activate.inputLabel}
                 </label>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <input
                     id="product-activation-code-input"
+                    dir="ltr"
                     type="text"
                     value={code}
                     onChange={(e) => {
                       setCode(e.target.value.toUpperCase());
                       if (errorMsg) setErrorMsg(null);
                     }}
-                    placeholder="e.g. ZR90-TEST-0001"
+                    placeholder={t.activate.inputPlaceholder}
                     disabled={submitting}
-                    className="flex-1 px-4 py-3 bg-gray-50 border border-[#E2E8F0] font-mono text-sm uppercase tracking-wider text-[#0B2346] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B2346] focus:border-[#0B2346] transition-colors"
+                    className="flex-1 px-4 py-3 bg-gray-50 border border-[#E2E8F0] font-mono text-sm uppercase tracking-wider text-[#0B2346] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B2346] focus:border-[#0B2346] transition-colors text-start"
                   />
                   <Button
                     type="submit"
@@ -194,18 +201,22 @@ export const ActivateProductPage: React.FC = () => {
                     {submitting ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Verifying...</span>
+                        <span>{t.activate.verifyingBtn}</span>
                       </>
                     ) : (
                       <>
                         <QrCode className="w-4 h-4" />
-                        <span>Activate Container</span>
+                        <span>{t.activate.submitBtn}</span>
                       </>
                     )}
                   </Button>
                 </div>
                 <p className="mt-2 text-[11px] text-gray-500 font-mono">
-                  Look for the 12 to 16-character alphanumeric code on your container's tamper-evident foil seal.
+                  {locale === 'ar'
+                    ? 'ابحث عن الرمز الأبجدي الرقمي المكون من 12 إلى 16 حرفاً على شريط الأمان الفضي للعبوة.'
+                    : locale === 'fr'
+                    ? 'Recherchez le code alphanumérique de 12 à 16 caractères sur le sceau inviolable de votre flacon.'
+                    : 'Look for the 12 to 16-character alphanumeric code on your container\'s tamper-evident foil seal.'}
                 </p>
               </div>
 
@@ -214,9 +225,6 @@ export const ActivateProductPage: React.FC = () => {
                 <div className="p-4 bg-red-50 border border-red-200 text-xs text-red-800 flex items-start gap-2.5">
                   <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <span className="font-bold uppercase tracking-wider text-[10px] text-red-900 block">
-                      Activation Rejected
-                    </span>
                     <p>{errorMsg}</p>
                   </div>
                 </div>
@@ -230,20 +238,30 @@ export const ActivateProductPage: React.FC = () => {
           <div className="p-4 bg-white border border-[#E2E8F0] space-y-1.5 shadow-xs">
             <div className="flex items-center gap-2 font-bold text-[#0B2346]">
               <Shield className="w-4 h-4 text-[#0B2346]" />
-              <span>Atomic Server-Authoritative Lock</span>
+              <span>{t.activate.containerSpecsTitle}</span>
             </div>
             <p className="text-gray-600 leading-relaxed text-[11px]">
-              Every activation is validated through an atomic cloud transaction with concurrency safety to prevent duplicate use and ensure accurate entitlement grants.
+              {t.activate.containerSpecsDesc}
             </p>
           </div>
 
           <div className="p-4 bg-white border border-[#E2E8F0] space-y-1.5 shadow-xs">
             <div className="flex items-center gap-2 font-bold text-[#0B2346]">
               <Package className="w-4 h-4 text-[#0B2346]" />
-              <span>Instant Entitlement Provisioning</span>
+              <span>
+                {locale === 'ar'
+                  ? 'منح فوري للصلاحيات'
+                  : locale === 'fr'
+                  ? 'Attribution instantanée des droits'
+                  : 'Instant Entitlement Provisioning'}
+              </span>
             </div>
             <p className="text-gray-600 leading-relaxed text-[11px]">
-              Once verified, your participant profile immediately receives COMMUNITY_ACCESS and SCHOOL_ACCESS to begin your educational trajectory.
+              {locale === 'ar'
+                ? 'بمجرد التحقق، يحصل ملفك على COMMUNITY_ACCESS مع تسجيل تقدم تفعيل العبوات لفتح مدرسة ZIRON عند بلوغ 3 عبوات.'
+                : locale === 'fr'
+                ? 'Une fois vérifié, votre profil reçoit COMMUNITY_ACCESS et enregistre la progression pour l\'accès à l\'École ZIRON (3 flacons requis).'
+                : 'Once verified, your profile receives COMMUNITY_ACCESS and records container activation progress toward unlocking ZIRON School (3 containers required).'}
             </p>
           </div>
         </div>

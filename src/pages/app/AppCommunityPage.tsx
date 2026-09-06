@@ -6,25 +6,28 @@ import {
   listCommunityPosts,
   listCommunityAnnouncements,
   createCommunityPost,
-  checkCommunityEntitlement,
 } from '@/services/communityService';
 import { Button } from '@/components/design-system/Button';
 import { Input } from '@/components/design-system/Input';
 import { GridPattern } from '@/components/design-system/GridPattern';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   MessageSquare,
   Lock,
   Plus,
   ShieldCheck,
-  AlertCircle,
   Loader2,
+  ArrowRight,
+  ArrowLeft,
+  X,
 } from 'lucide-react';
 
 export const AppCommunityPage: React.FC = () => {
   const { user, profile, loading: authLoading, isStaff } = useAuth();
-  const { navigate } = useI18n();
-  const { hasCommunityAccess } = useCustomerEntitlements();
+  const { locale, dir, navigate } = useI18n();
+  const t = getAppTranslations(locale);
+  const { hasCommunityAccess, qualifyingContainerCount } = useCustomerEntitlements();
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [announcements, setAnnouncements] = useState<CommunityAnnouncement[]>([]);
@@ -80,7 +83,7 @@ export const AppCommunityPage: React.FC = () => {
     return (
       <div className="py-24 text-center text-xs font-mono text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-        VERIFYING SESSION STATE...
+        {t.common.verifying}
       </div>
     );
   }
@@ -93,18 +96,18 @@ export const AppCommunityPage: React.FC = () => {
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
             <h1 className="text-xl font-bold text-[#0B2346] mb-2">
-              Authentication Required
+              {t.shell.authRequiredTitle}
             </h1>
             <p className="text-xs text-gray-600 mb-6">
-              Sign in to your ZIRON participant profile to access the private community forum.
+              {t.shell.authRequiredDesc}
             </p>
             <Button
               onClick={() => navigate('login')}
               variant="primary"
               size="md"
-              className="w-full"
+              className="w-full cursor-pointer"
             >
-              Authenticate Now
+              {t.common.signIn}
             </Button>
           </div>
         </div>
@@ -120,28 +123,30 @@ export const AppCommunityPage: React.FC = () => {
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm relative text-center">
             <GridPattern />
             <div className="relative z-10">
-              <div className="w-12 h-12 bg-amber-50 border border-amber-200 text-[#F28C28] flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-6 h-6" />
+              <div className="w-14 h-14 bg-amber-50 border border-amber-200 text-[#F28C28] flex items-center justify-center mx-auto mb-4 rounded-full">
+                <Lock className="w-7 h-7" />
               </div>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#F28C28] font-bold block mb-1">
-                ACTIVATION ENTITLEMENT REQUIRED
+                {t.community.lockedTitle}
               </span>
               <h1 className="text-2xl font-black text-[#0B2346] mb-3">
-                ZIRON Community Locked
+                {t.community.title}
               </h1>
-              <p className="text-xs text-gray-600 leading-relaxed mb-6">
-                Your authenticated profile ({user.email}) does not have an active verified product activation. Community access is granted upon authenticating a verified container serial code from Phase 01, Phase 02, or Phase 03.
+              <p className="text-xs text-gray-600 leading-relaxed mb-6 max-w-md mx-auto">
+                {t.community.lockedDesc}
               </p>
 
-              <div className="p-4 bg-gray-50 border border-gray-200 text-start text-xs font-mono mb-6 space-y-1">
-                <div className="text-gray-500 font-bold uppercase text-[10px]">Entitlement Status</div>
-                <div className="flex justify-between">
-                  <span>Community Access:</span>
-                  <span className="text-red-600 font-bold">INACTIVE</span>
+              <div className="p-4 bg-gray-50 border border-gray-200 text-start text-xs font-mono mb-6 space-y-2">
+                <div className="text-gray-500 font-bold uppercase text-[10px]">
+                  {locale === 'ar' ? 'حالة الصلاحية' : locale === 'fr' ? 'Statut du droit' : 'Entitlement Status'}
                 </div>
                 <div className="flex justify-between">
-                  <span>Verified Container Codes:</span>
-                  <span className="text-gray-700">0 LINKED</span>
+                  <span>{locale === 'ar' ? 'صلاحية المجتمع' : locale === 'fr' ? 'Accès communauté' : 'Community Access'}:</span>
+                  <span className="text-red-600 font-bold">{t.common.locked}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>{locale === 'ar' ? 'العبوات المفعّلة' : locale === 'fr' ? 'Flacons vérifiés' : 'Verified Containers'}:</span>
+                  <span className="text-gray-700 font-semibold" dir="ltr">{qualifyingContainerCount}</span>
                 </div>
               </div>
 
@@ -150,9 +155,14 @@ export const AppCommunityPage: React.FC = () => {
                   onClick={() => navigate('app/products/activate')}
                   variant="primary"
                   size="md"
-                  className="flex-1 cursor-pointer"
+                  className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2"
                 >
-                  Activate Product Code
+                  <span>{t.dashboard.activateProductBtn}</span>
+                  {dir === 'rtl' ? (
+                    <ArrowLeft className="w-4 h-4" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4" />
+                  )}
                 </Button>
                 <Button
                   onClick={() => navigate('app')}
@@ -160,7 +170,7 @@ export const AppCommunityPage: React.FC = () => {
                   size="md"
                   className="flex-1 cursor-pointer"
                 >
-                  Back to Dashboard
+                  {t.common.backToDashboard}
                 </Button>
               </div>
             </div>
@@ -178,13 +188,13 @@ export const AppCommunityPage: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-emerald-50 text-emerald-800 font-mono text-[10px] font-bold uppercase tracking-wider mb-2">
               <ShieldCheck className="w-3.5 h-3.5" />
-              VERIFIED SUBJECT ACCESS GRANTED
+              {t.common.unlocked}
             </div>
             <h1 className="text-2xl font-black text-[#0B2346]">
-              ZIRON Community Portal
+              {t.community.title}
             </h1>
             <p className="text-xs text-gray-600 mt-0.5">
-              Engage with verified participants and review official biopharma advisories.
+              {t.community.subtitle}
             </p>
           </div>
 
@@ -195,7 +205,7 @@ export const AppCommunityPage: React.FC = () => {
             className="flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>New Discussion</span>
+            <span>{t.community.newPostBtn}</span>
           </Button>
         </div>
 
@@ -203,7 +213,7 @@ export const AppCommunityPage: React.FC = () => {
         {announcements.length > 0 && (
           <div className="space-y-3">
             <h2 className="text-xs font-mono uppercase tracking-wider font-bold text-[#0B2346]">
-              Official Advisories
+              {t.community.announcementsTitle}
             </h2>
             {announcements.map((ann) => (
               <div
@@ -212,14 +222,18 @@ export const AppCommunityPage: React.FC = () => {
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400 font-bold">
-                    VIREXON CLINICAL BROADCAST
+                    VIREXON BIOSCIENCES
                   </span>
-                  <span className="text-[10px] font-mono text-gray-400">
+                  <span className="text-[10px] font-mono text-gray-400" dir="ltr">
                     {new Date(ann.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-white mb-2">{ann.title.en}</h3>
-                <p className="text-xs text-gray-200 leading-relaxed">{ann.content.en}</p>
+                <h3 className="text-sm font-bold text-white mb-2">
+                  {ann.title[locale] || ann.title.en}
+                </h3>
+                <p className="text-xs text-gray-200 leading-relaxed">
+                  {ann.content[locale] || ann.content.en}
+                </p>
               </div>
             ))}
           </div>
@@ -228,21 +242,23 @@ export const AppCommunityPage: React.FC = () => {
         {/* Discussion Posts Feed */}
         <div className="space-y-4">
           <h2 className="text-xs font-mono uppercase tracking-wider font-bold text-[#0B2346]">
-            Participant Discussions
+            {t.community.discussionForumTitle}
           </h2>
 
           {loading ? (
             <div className="p-12 text-center text-xs font-mono text-gray-500 bg-white border border-[#E2E8F0]">
               <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-              LOADING FORUM FEED...
+              {t.common.loading}
             </div>
           ) : posts.length === 0 ? (
             /* Explicit empty state */
-            <div className="p-12 text-center bg-white border border-[#E2E8F0]">
+            <div className="p-12 text-center bg-white border border-[#E2E8F0] space-y-2">
               <MessageSquare className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-xs font-bold text-gray-700">No community discussions posted yet</p>
-              <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                Be the first verified participant to initiate a discussion regarding trajectory milestones.
+              <p className="text-xs font-bold text-gray-700">
+                {t.community.noPostsYet}
+              </p>
+              <p className="text-xs text-gray-500 max-w-sm mx-auto leading-relaxed">
+                {t.community.noPostsDesc}
               </p>
               <Button
                 onClick={() => setShowNewPostModal(true)}
@@ -250,7 +266,7 @@ export const AppCommunityPage: React.FC = () => {
                 size="sm"
                 className="mt-4 cursor-pointer"
               >
-                Initiate First Discussion
+                {t.community.newPostBtn}
               </Button>
             </div>
           ) : (
@@ -259,19 +275,23 @@ export const AppCommunityPage: React.FC = () => {
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-[#0B2346]">{post.authorName}</span>
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 bg-gray-100 text-gray-600">
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 bg-gray-100 text-gray-600">
                       {post.authorRoles?.[0] || 'SUBJECT'}
                     </span>
                   </div>
-                  <span className="text-[10px] font-mono text-gray-400">
+                  <span className="text-[10px] font-mono text-gray-400" dir="ltr">
                     {new Date(post.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <h3 className="text-sm font-bold text-gray-900 mb-1">{post.title}</h3>
                 <p className="text-xs text-gray-600 leading-relaxed mb-3">{post.body}</p>
                 <div className="flex items-center gap-4 text-xs text-gray-400 font-mono">
-                  <span>Likes: {post.likesCount}</span>
-                  <span>Replies: {post.commentsCount}</span>
+                  <span>
+                    {t.community.likesCount}: <span dir="ltr">{post.likesCount}</span>
+                  </span>
+                  <span>
+                    {t.community.commentsCount}: <span dir="ltr">{post.commentsCount}</span>
+                  </span>
                 </div>
               </div>
             ))
@@ -283,24 +303,36 @@ export const AppCommunityPage: React.FC = () => {
       {showNewPostModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-[#E2E8F0] max-w-lg w-full p-6 shadow-xl relative">
-            <h2 className="text-base font-bold text-[#0B2346] mb-1">Initiate Community Discussion</h2>
+            <button
+              onClick={() => setShowNewPostModal(false)}
+              className="absolute top-4 end-4 text-gray-400 hover:text-gray-600 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-base font-bold text-[#0B2346] mb-1">
+              {t.community.createPostTitle}
+            </h2>
             <p className="text-xs text-gray-600 mb-4">
-              Your post will be published to the verified cohort stream.
+              {locale === 'ar'
+                ? 'سيتم نشر موضوعك للمشاركين المعتمدين في المجتمع.'
+                : locale === 'fr'
+                ? 'Votre sujet sera publié pour les participants vérifiés de la cohorte.'
+                : 'Your post will be published to the verified cohort stream.'}
             </p>
 
             <form onSubmit={handleCreatePost} className="space-y-3">
               <Input
-                label="Topic Title"
+                label={t.community.postTitleLabel}
                 type="text"
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Day 30 Energy Profile & Sleep Latency observations"
+                placeholder={t.community.postTitlePlaceholder}
               />
 
               <div>
                 <label className="block text-xs font-semibold text-[#0B2346] mb-1">
-                  Discussion Content
+                  {t.community.postBodyLabel}
                 </label>
                 <textarea
                   required
@@ -308,7 +340,7 @@ export const AppCommunityPage: React.FC = () => {
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   className="w-full text-xs p-2 border border-[#E2E8F0] focus:border-[#0B2346] focus:outline-none"
-                  placeholder="Detail your observations, questions, or physiological metrics..."
+                  placeholder={t.community.postBodyPlaceholder}
                 />
               </div>
 
@@ -318,11 +350,18 @@ export const AppCommunityPage: React.FC = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowNewPostModal(false)}
+                  className="cursor-pointer"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </Button>
-                <Button type="submit" variant="primary" size="sm" disabled={submitting}>
-                  {submitting ? 'Publishing...' : 'Publish Discussion'}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={submitting}
+                  className="cursor-pointer"
+                >
+                  {submitting ? t.community.publishing : t.community.submitPostBtn}
                 </Button>
               </div>
             </form>

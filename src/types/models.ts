@@ -32,6 +32,7 @@ export interface UserProfile {
   onboardingCompleted: boolean;
   communityAccess: boolean;
   schoolAccess: boolean;
+  qualifyingContainerCount?: number;
   xp: number;
   level: number;
   locale: string;

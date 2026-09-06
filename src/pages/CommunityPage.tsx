@@ -2,20 +2,40 @@ import React from 'react';
 import { useI18n } from '@/context/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/design-system/Button';
-import { Card } from '@/components/design-system/Card';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   MessageSquare,
   ShieldCheck,
   Users,
   Sparkles,
   ArrowRight,
-  Lock,
+  ArrowLeft,
 } from 'lucide-react';
 
 export const CommunityPage: React.FC = () => {
-  const { content, navigate } = useI18n();
-  const { user, profile } = useAuth();
+  const { locale, content, dir, navigate } = useI18n();
+  const { user } = useAuth();
+  const t = getAppTranslations(locale);
+
+  const comm = content.community || {
+    heroBadge: 'SUBJECT COLLABORATION NETWORK',
+    heroTitle: 'The ZIRON Verified Community',
+    heroSubtitle:
+      'A private, moderated forum connecting participants traversing the 90-day biological trajectory.',
+    enterCommunityBtn: 'Enter Community',
+    enrollBtn: 'Enroll for Access',
+    verifyCodeBtn: 'Verify Container Code',
+    shieldTitle: 'Verified Physical Ownership',
+    shieldDesc:
+      'Entry requires serial verification from a genuine ZIRON 30-capsule phase container, ensuring discussions remain evidence-based and authentic.',
+    cohortTitle: 'Phase-Cohort Synchrony',
+    cohortDesc:
+      'Connect with subjects currently in Phase 01, Phase 02, or Phase 03 to compare trajectories.',
+    moderationTitle: 'Scientific Oversight',
+    moderationDesc:
+      'Dedicated bio-scientific moderators ensure peer interactions remain constructive, safe, and aligned with evidence standards.',
+  };
 
   return (
     <div className="py-12 bg-[#F5F7FA]">
@@ -27,14 +47,14 @@ export const CommunityPage: React.FC = () => {
             <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-gray-100 border border-[#E2E8F0] mb-4">
               <MessageSquare className="w-3.5 h-3.5 text-[#0B2346]" />
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#0B2346] font-bold">
-                SUBJECT COLLABORATION NETWORK
+                {comm.heroBadge}
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#0B2346] mb-4">
-              The ZIRON Verified Community
+              {comm.heroTitle}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 leading-relaxed mb-6">
-              A private, moderated forum connecting participants traversing the 90-day biological trajectory. Share biometrics, discuss dietary synergy, and consult peer protocols.
+              {comm.heroSubtitle}
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -43,10 +63,14 @@ export const CommunityPage: React.FC = () => {
                   onClick={() => navigate('app/community')}
                   variant="primary"
                   size="lg"
-                  className="cursor-pointer"
+                  className="cursor-pointer inline-flex items-center gap-2"
                 >
-                  Enter Community Portal
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  <span>{comm.enterCommunityBtn}</span>
+                  {dir === 'rtl' ? (
+                    <ArrowLeft className="w-4 h-4" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4" />
+                  )}
                 </Button>
               ) : (
                 <>
@@ -54,10 +78,14 @@ export const CommunityPage: React.FC = () => {
                     onClick={() => navigate('register')}
                     variant="primary"
                     size="lg"
-                    className="cursor-pointer"
+                    className="cursor-pointer inline-flex items-center gap-2"
                   >
-                    Enroll & Enter Community
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <span>{comm.enrollBtn}</span>
+                    {dir === 'rtl' ? (
+                      <ArrowLeft className="w-4 h-4" />
+                    ) : (
+                      <ArrowRight className="w-4 h-4" />
+                    )}
                   </Button>
                   <Button
                     onClick={() => navigate('verify')}
@@ -65,7 +93,7 @@ export const CommunityPage: React.FC = () => {
                     size="lg"
                     className="cursor-pointer"
                   >
-                    Verify Container Code First
+                    {comm.verifyCodeBtn}
                   </Button>
                 </>
               )}
@@ -80,10 +108,10 @@ export const CommunityPage: React.FC = () => {
               <ShieldCheck className="w-5 h-5" />
             </div>
             <h3 className="text-sm font-bold text-[#0B2346] mb-2">
-              Verified Physical Ownership
+              {comm.shieldTitle}
             </h3>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Entry requires serial verification from a genuine ZIRON 30-capsule phase container, ensuring discussions remain evidence-based and authentic.
+              {comm.shieldDesc}
             </p>
           </div>
 
@@ -92,10 +120,10 @@ export const CommunityPage: React.FC = () => {
               <Users className="w-5 h-5" />
             </div>
             <h3 className="text-sm font-bold text-[#0B2346] mb-2">
-              Phase-Cohort Synchrony
+              {comm.cohortTitle}
             </h3>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Connect with subjects currently in Phase 01 (Foundation), Phase 02 (Optimization), or Phase 03 (Stabilization) to compare trajectories.
+              {comm.cohortDesc}
             </p>
           </div>
 
@@ -104,10 +132,10 @@ export const CommunityPage: React.FC = () => {
               <Sparkles className="w-5 h-5" />
             </div>
             <h3 className="text-sm font-bold text-[#0B2346] mb-2">
-              Moderated Biopharma Integrity
+              {comm.moderationTitle}
             </h3>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Strict scientific moderation guarantees that discussions avoid pseudoscience while fostering actionable peer-reviewed biological methodologies.
+              {comm.moderationDesc}
             </p>
           </div>
         </div>

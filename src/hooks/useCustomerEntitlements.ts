@@ -11,6 +11,7 @@ export interface CustomerEntitlementState {
   hasActivatedProduct: boolean;
   hasCommunityAccess: boolean;
   hasSchoolAccess: boolean;
+  qualifyingContainerCount: number;
   activations: ActivationRecord[];
   entitlements: EntitlementRecord[];
   latestActivation: ActivationRecord | null;
@@ -56,9 +57,24 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
   }, [refreshProfile, loadData]);
 
   const hasActivatedProduct = activations.length > 0;
+
+  // Qualification logic:
+  // Count distinct activated container identities (code values) belonging to user
+  const distinctContainerCodes = new Set<string>();
+  activations.forEach((a) => {
+    const codeVal = (a.code || '').trim().toUpperCase();
+    if (codeVal) {
+      distinctContainerCodes.add(codeVal);
+    }
+  });
+  const qualifyingContainerCount = Math.max(
+    distinctContainerCodes.size,
+    profile?.qualifyingContainerCount || 0
+  );
   
   // Authoritative entitlement check: Staff bypass OR authoritative ACTIVE entitlement document.
-  // Profile flags (communityAccess, schoolAccess) are denormalized UI cache hints and do NOT grant independent authorization.
+  // Earned access: Once a user has legitimately unlocked School, treat School access as EARNED ACCESS.
+  // Do NOT automatically revoke School access merely because a product entitlement later becomes EXPIRED or INACTIVE.
   const hasCommunityAccess = Boolean(
     isStaff ||
     entitlements.some(
@@ -68,8 +84,10 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
 
   const hasSchoolAccess = Boolean(
     isStaff ||
+    qualifyingContainerCount >= 3 ||
+    profile?.schoolAccess === true ||
     entitlements.some(
-      (e) => e.entitlementType === 'SCHOOL_ACCESS' && e.status === 'ACTIVE'
+      (e) => e.entitlementType === 'SCHOOL_ACCESS' && e.status !== 'REVOKED'
     )
   );
 
@@ -80,6 +98,7 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
     hasActivatedProduct,
     hasCommunityAccess,
     hasSchoolAccess,
+    qualifyingContainerCount,
     activations,
     entitlements,
     latestActivation,

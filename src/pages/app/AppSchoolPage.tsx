@@ -5,25 +5,30 @@ import { SchoolCategory, SchoolCourse } from '@/types/models';
 import {
   listSchoolCategories,
   listCoursesByCategory,
-  checkSchoolEntitlement,
 } from '@/services/schoolService';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   GraduationCap,
   Lock,
   BookOpen,
-  Award,
+  CheckCircle2,
   ChevronRight,
   Loader2,
   Clock,
+  ArrowRight,
+  ArrowLeft,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 
 export const AppSchoolPage: React.FC = () => {
-  const { user, profile, loading: authLoading, isStaff } = useAuth();
-  const { locale, navigate } = useI18n();
-  const { hasSchoolAccess } = useCustomerEntitlements();
+  const { user, loading: authLoading, isStaff } = useAuth();
+  const { locale, dir, navigate } = useI18n();
+  const t = getAppTranslations(locale);
+  const { hasSchoolAccess, qualifyingContainerCount } = useCustomerEntitlements();
 
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<SchoolCategory | null>(null);
@@ -31,8 +36,8 @@ export const AppSchoolPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(false);
 
-  // Access requires staff bypass OR authoritative active SCHOOL_ACCESS entitlement
-  const hasAccess = Boolean(isStaff || hasSchoolAccess);
+  // Access requires staff bypass OR authoritative active SCHOOL_ACCESS entitlement (or qualifying count >= 3)
+  const hasAccess = Boolean(isStaff || hasSchoolAccess || qualifyingContainerCount >= 3);
 
   useEffect(() => {
     async function loadCats() {
@@ -69,11 +74,21 @@ export const AppSchoolPage: React.FC = () => {
     }
   }, [selectedCategory]);
 
+  const count = Math.max(0, Math.min(3, qualifyingContainerCount));
+
+  // Determine dynamic message based on 3-container count
+  const getStatusMessage = () => {
+    if (count === 0) return t.school.zeroContainersMsg;
+    if (count === 1) return t.school.oneContainerMsg;
+    if (count === 2) return t.school.twoContainersMsg;
+    return t.school.threeContainersMsg;
+  };
+
   if (authLoading) {
     return (
       <div className="py-24 text-center text-xs font-mono text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-        VERIFYING CURRICULAR PRIVILEGES...
+        {t.common.verifying}
       </div>
     );
   }
@@ -86,18 +101,18 @@ export const AppSchoolPage: React.FC = () => {
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
             <h1 className="text-xl font-bold text-[#0B2346] mb-2">
-              Authentication Required
+              {t.shell.authRequiredTitle}
             </h1>
             <p className="text-xs text-gray-600 mb-6">
-              Sign in to your ZIRON participant profile to access the dynamic learning academy.
+              {t.shell.authRequiredDesc}
             </p>
             <Button
               onClick={() => navigate('login')}
               variant="primary"
               size="md"
-              className="w-full"
+              className="w-full cursor-pointer"
             >
-              Sign In to Profile
+              {t.common.signIn}
             </Button>
           </div>
         </div>
@@ -105,47 +120,100 @@ export const AppSchoolPage: React.FC = () => {
     );
   }
 
-  // Not entitled
+  // Not entitled: Show 3-container qualification progress
   if (!hasAccess) {
+    const progressPercent = Math.round((count / 3) * 100);
+
     return (
       <div className="py-16 bg-[#F5F7FA]">
-        <div className="max-w-lg mx-auto px-4">
+        <div className="max-w-xl mx-auto px-4">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm relative text-center">
             <GridPattern />
             <div className="relative z-10">
-              <div className="w-12 h-12 bg-amber-50 border border-amber-200 text-[#F28C28] flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-6 h-6" />
+              <div className="w-14 h-14 bg-amber-50 border border-amber-200 text-[#F28C28] flex items-center justify-center mx-auto mb-4 rounded-full">
+                <Lock className="w-7 h-7" />
               </div>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#F28C28] font-bold block mb-1">
-                ADVANCED ENTITLEMENT REQUIRED
+                {t.school.lockedTitle}
               </span>
               <h1 className="text-2xl font-black text-[#0B2346] mb-3">
-                ZIRON School Locked
+                {t.school.title}
               </h1>
-              <p className="text-xs text-gray-600 leading-relaxed mb-6">
-                Curriculum access requires verified multi-phase container activation. In accordance with the ZIRON journey, verified serial activations from active program phases unlock the mastery curriculum tracks.
+              <p className="text-xs text-gray-600 leading-relaxed mb-6 max-w-md mx-auto">
+                {t.school.ruleExplanation}
               </p>
 
-              <div className="p-4 bg-gray-50 border border-gray-200 text-start text-xs font-mono mb-6 space-y-1">
-                <div className="text-gray-500 font-bold uppercase text-[10px]">Entitlement Check</div>
-                <div className="flex justify-between">
-                  <span>School Entitlement:</span>
-                  <span className="text-red-600 font-bold">LOCKED</span>
+              {/* 3-Container Qualification Progress Box */}
+              <div className="p-5 bg-gray-50 border border-gray-200 text-start text-xs mb-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[#0B2346] text-xs">
+                    {t.school.progressLabel}
+                  </span>
+                  <span
+                    dir="ltr"
+                    className="font-mono text-xs font-bold text-[#0B2346] bg-white px-2.5 py-0.5 border border-gray-200"
+                  >
+                    {count} / 3
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span>Required Activation:</span>
-                  <span className="text-gray-700 font-semibold">Verified ZIRON Phase Container</span>
+
+                {/* Visual Progress Bar */}
+                <div className="w-full bg-gray-200 h-2 overflow-hidden">
+                  <div
+                    className="bg-[#0B2346] h-full transition-all duration-500"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+
+                {/* 3 Step Indicators */}
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {[1, 2, 3].map((step) => {
+                    const isCompleted = count >= step;
+                    return (
+                      <div
+                        key={step}
+                        className={`p-2 border text-center text-[11px] font-mono transition-colors ${
+                          isCompleted
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-bold'
+                            : 'bg-white border-gray-200 text-gray-400'
+                        }`}
+                      >
+                        <div className="flex items-center justify-center gap-1">
+                          {isCompleted ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          ) : (
+                            <span className="w-3.5 h-3.5 rounded-full border border-gray-300 inline-block shrink-0" />
+                          )}
+                          <span dir="ltr">#{step}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Status Guidance Message */}
+                <div className="p-3 bg-blue-50/70 border border-blue-100 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-[#0B2346] shrink-0 mt-0.5" />
+                  <p className="text-xs text-[#0B2346] font-medium leading-relaxed">
+                    {getStatusMessage()}
+                  </p>
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Button
                   onClick={() => navigate('app/products/activate')}
                   variant="primary"
                   size="md"
-                  className="flex-1 cursor-pointer"
+                  className="flex-1 cursor-pointer inline-flex items-center justify-center gap-2"
                 >
-                  Activate Product Code
+                  <span>{count === 0 ? t.school.activateFirstBtn : t.school.activateAnotherBtn}</span>
+                  {dir === 'rtl' ? (
+                    <ArrowLeft className="w-4 h-4" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4" />
+                  )}
                 </Button>
                 <Button
                   onClick={() => navigate('app')}
@@ -153,7 +221,7 @@ export const AppSchoolPage: React.FC = () => {
                   size="md"
                   className="flex-1 cursor-pointer"
                 >
-                  Back to Dashboard
+                  {t.common.backToDashboard}
                 </Button>
               </div>
             </div>
@@ -163,57 +231,73 @@ export const AppSchoolPage: React.FC = () => {
     );
   }
 
+  // Unlocked State: Full Curriculum Academy
   return (
     <div className="py-10 bg-[#F5F7FA]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        {/* Header */}
-        <div className="bg-white border border-[#E2E8F0] p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 px-2 py-0.5 bg-emerald-50 text-emerald-800 font-mono text-[10px] font-bold uppercase tracking-wider mb-2">
-              <GraduationCap className="w-3.5 h-3.5" />
-              CURRICULUM ACCESS ACTIVE
+        {/* Header Dossier */}
+        <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative overflow-hidden">
+          <GridPattern />
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-[10px] font-bold uppercase tracking-wider mb-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{t.school.curriculumAccessActive}</span>
+              <span className="mx-1">•</span>
+              <span dir="ltr">3 / 3 {t.school.containersUnlockedBadge}</span>
             </div>
-            <h1 className="text-2xl font-black text-[#0B2346]">
-              ZIRON School of Applied Mastery
+            <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346]">
+              {t.school.title}
             </h1>
-            <p className="text-xs text-gray-600 mt-0.5">
-              Explore dynamic modular courses across biological, technological, and enterprise tracks.
+            <p className="text-xs sm:text-sm text-gray-600 mt-1 max-w-2xl leading-relaxed">
+              {t.school.subtitle}
             </p>
+          </div>
+          <div className="relative z-10 shrink-0">
+            <Button
+              onClick={() => navigate('app/certificates')}
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
+            >
+              {t.shell.navCertificates}
+            </Button>
           </div>
         </div>
 
         {/* Dynamic Category Navigation Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#E2E8F0]">
-          {categories.map((cat) => {
-            const isSelected = selectedCategory?.id === cat.id;
-            const title = cat.title[locale] || cat.title.en;
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 text-xs font-semibold whitespace-nowrap cursor-pointer transition-colors border ${
-                  isSelected
-                    ? 'bg-[#0B2346] text-white border-[#0B2346]'
-                    : 'bg-white text-gray-700 border-[#E2E8F0] hover:bg-gray-50'
-                }`}
-              >
-                {title}
-              </button>
-            );
-          })}
-        </div>
+        {categories.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#E2E8F0]">
+            {categories.map((cat) => {
+              const isSelected = selectedCategory?.id === cat.id;
+              const title = cat.title[locale] || cat.title.en;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-4 py-2.5 text-xs font-semibold whitespace-nowrap cursor-pointer transition-colors border ${
+                    isSelected
+                      ? 'bg-[#0B2346] text-white border-[#0B2346] shadow-sm'
+                      : 'bg-white text-gray-700 border-[#E2E8F0] hover:bg-gray-50'
+                  }`}
+                >
+                  {title}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Courses Section */}
         {selectedCategory && (
           <div className="space-y-4">
             <div className="bg-white border border-[#E2E8F0] p-6">
               <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest font-bold block mb-1">
-                ACTIVE TRACK: {selectedCategory.slug.toUpperCase()}
+                {t.school.activeTrack}: <span dir="ltr">{selectedCategory.slug.toUpperCase()}</span>
               </span>
               <h2 className="text-lg font-bold text-[#0B2346]">
                 {selectedCategory.title[locale] || selectedCategory.title.en}
               </h2>
-              <p className="text-xs text-gray-600 mt-1 max-w-2xl">
+              <p className="text-xs text-gray-600 mt-1 max-w-2xl leading-relaxed">
                 {selectedCategory.description[locale] || selectedCategory.description.en}
               </p>
             </div>
@@ -221,46 +305,57 @@ export const AppSchoolPage: React.FC = () => {
             {loadingCourses ? (
               <div className="p-12 text-center text-xs font-mono text-gray-500 bg-white border border-[#E2E8F0]">
                 <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-                LOADING COURSES...
+                {t.school.loadingCourses}
               </div>
             ) : courses.length === 0 ? (
               /* Explicit empty state */
-              <div className="p-12 text-center bg-white border border-[#E2E8F0]">
+              <div className="p-12 text-center bg-white border border-[#E2E8F0] space-y-2">
                 <BookOpen className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-xs font-bold text-gray-700">
-                  No courses published in this track yet
+                  {t.school.noCoursesTitle}
                 </p>
-                <p className="text-xs text-gray-500 mt-1 max-w-md mx-auto">
-                  Curriculum modules for this track are currently being finalized by the scientific and academic advisory board.
+                <p className="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
+                  {t.school.noCoursesDesc}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {courses.map((course) => (
-                  <div
-                    key={course.id}
-                    className="bg-white border border-[#E2E8F0] p-5 hover:border-[#0B2346] transition-colors"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="px-2 py-0.5 bg-blue-50 text-[#0B2346] text-[10px] font-mono font-bold uppercase">
-                        {course.difficulty}
-                      </span>
-                      <span className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {course.estimatedHours} Hours
-                      </span>
+                {courses.map((course) => {
+                  const difficultyLabel =
+                    course.difficulty === 'beginner'
+                      ? t.school.difficultyBeginner
+                      : course.difficulty === 'advanced'
+                      ? t.school.difficultyAdvanced
+                      : t.school.difficultyIntermediate;
+
+                  return (
+                    <div
+                      key={course.id}
+                      className="bg-white border border-[#E2E8F0] p-6 hover:border-[#0B2346] transition-colors flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="px-2 py-0.5 bg-blue-50 text-[#0B2346] text-[10px] font-mono font-bold uppercase border border-blue-100">
+                            {difficultyLabel}
+                          </span>
+                          <span className="text-[10px] font-mono text-gray-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            <span dir="ltr">{course.estimatedHours}</span> {t.school.hoursCount}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-bold text-[#0B2346] mb-1.5">
+                          {course.title[locale] || course.title.en}
+                        </h3>
+                        <p className="text-xs text-gray-600 mb-5 leading-relaxed line-clamp-2">
+                          {course.description[locale] || course.description.en}
+                        </p>
+                      </div>
+                      <Button variant="outline" size="sm" className="w-full cursor-pointer">
+                        {t.school.viewCurriculumBtn}
+                      </Button>
                     </div>
-                    <h3 className="text-sm font-bold text-[#0B2346] mb-1">
-                      {course.title[locale] || course.title.en}
-                    </h3>
-                    <p className="text-xs text-gray-600 mb-4 line-clamp-2">
-                      {course.description[locale] || course.description.en}
-                    </p>
-                    <Button variant="outline" size="sm" className="w-full">
-                      View Curriculum Modules
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

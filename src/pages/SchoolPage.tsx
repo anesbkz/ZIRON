@@ -5,11 +5,13 @@ import { SchoolCategory } from '@/types/models';
 import { listSchoolCategories } from '@/services/schoolService';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getSiteContent } from '@/lib/content/site-content';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   GraduationCap,
-  Award,
   BookOpen,
   ArrowRight,
+  ArrowLeft,
   Sparkles,
   Cpu,
   Sprout,
@@ -33,8 +35,10 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 
 export const SchoolPage: React.FC = () => {
-  const { locale, navigate } = useI18n();
+  const { locale, dir, navigate } = useI18n();
   const { user } = useAuth();
+  const content = getSiteContent(locale);
+  const t = getAppTranslations(locale);
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -50,6 +54,19 @@ export const SchoolPage: React.FC = () => {
     load();
   }, []);
 
+  const schoolContent = content.school || {
+    heroBadge: 'CONTINUOUS MASTERY & CURRICULA',
+    heroTitle: 'The ZIRON School of Biopharma & Applied Mastery',
+    heroSubtitle:
+      'A dynamic educational ecosystem bridging human biology, metabolic optimization, precision agriculture, digital literacy, and high-impact enterprise execution.',
+    enterPortalBtn: 'Enter School Portal',
+    enrollBtn: 'Enroll to Unlock Curricula',
+    verifyCodeBtn: 'Verify Container Code',
+    tracksAvailable: 'Curriculum Tracks Available',
+    trackNumber: 'Track',
+    qualificationNotice: 'Restart School requires 3 activated product containers.',
+  };
+
   return (
     <div className="py-12 bg-[#F5F7FA]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
@@ -60,14 +77,14 @@ export const SchoolPage: React.FC = () => {
             <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-gray-100 border border-[#E2E8F0] mb-4">
               <GraduationCap className="w-3.5 h-3.5 text-[#0B2346]" />
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#0B2346] font-bold">
-                CONTINUOUS MASTERY & CURRICULA
+                {schoolContent.heroBadge}
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-[#0B2346] mb-4">
-              The ZIRON School of Biopharma & Applied Mastery
+              {schoolContent.heroTitle}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 leading-relaxed mb-6">
-              A dynamic educational ecosystem bridging human biology, metabolic optimization, precision agriculture, digital literacy, and high-impact enterprise execution.
+              {schoolContent.heroSubtitle}
             </p>
 
             <div className="flex flex-wrap gap-3">
@@ -76,10 +93,14 @@ export const SchoolPage: React.FC = () => {
                   onClick={() => navigate('app/school')}
                   variant="primary"
                   size="lg"
-                  className="cursor-pointer"
+                  className="cursor-pointer inline-flex items-center gap-2"
                 >
-                  Enter School Portal
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  <span>{schoolContent.enterPortalBtn}</span>
+                  {dir === 'rtl' ? (
+                    <ArrowLeft className="w-4 h-4" />
+                  ) : (
+                    <ArrowRight className="w-4 h-4" />
+                  )}
                 </Button>
               ) : (
                 <>
@@ -87,10 +108,14 @@ export const SchoolPage: React.FC = () => {
                     onClick={() => navigate('register')}
                     variant="primary"
                     size="lg"
-                    className="cursor-pointer"
+                    className="cursor-pointer inline-flex items-center gap-2"
                   >
-                    Enroll to Unlock Curricula
-                    <ArrowRight className="w-4 h-4 ml-2" />
+                    <span>{schoolContent.enrollBtn}</span>
+                    {dir === 'rtl' ? (
+                      <ArrowLeft className="w-4 h-4" />
+                    ) : (
+                      <ArrowRight className="w-4 h-4" />
+                    )}
                   </Button>
                   <Button
                     onClick={() => navigate('verify')}
@@ -98,7 +123,7 @@ export const SchoolPage: React.FC = () => {
                     size="lg"
                     className="cursor-pointer"
                   >
-                    Verify Container Code
+                    {schoolContent.verifyCodeBtn}
                   </Button>
                 </>
               )}
@@ -111,21 +136,21 @@ export const SchoolPage: React.FC = () => {
           <div className="mb-6 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-mono uppercase tracking-widest text-gray-500 font-bold block mb-1">
-                CURRICULAR TRACKS
+                {locale === 'ar' ? 'المسارات الدراسية' : locale === 'fr' ? 'Parcours d\'études' : 'Curriculum Tracks'}
               </span>
               <h2 className="text-2xl font-black text-[#0B2346]">
-                Dynamic Study Categories
+                {locale === 'ar' ? 'فئات الدراسة التأسيسية' : locale === 'fr' ? 'Catégories d\'études fondamentales' : 'Foundational Study Categories'}
               </h2>
             </div>
             <span className="text-xs font-mono text-gray-500">
-              {categories.length} TRACKS AVAILABLE
+              <span dir="ltr">{categories.length}</span> {t.school.tracksAvailable}
             </span>
           </div>
 
           {loading ? (
             <div className="p-12 text-center text-xs font-mono text-gray-500 bg-white border border-[#E2E8F0]">
               <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-              LOADING CURRICULA FROM FIRESTORE...
+              {t.common.loading}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -149,8 +174,12 @@ export const SchoolPage: React.FC = () => {
                     </div>
 
                     <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] font-mono font-semibold text-gray-500">
-                      <span>TRACK #{cat.displayOrder}</span>
-                      <ArrowRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#0B2346] transition-transform group-hover:translate-x-1" />
+                      <span>{schoolContent.trackNumber} <span dir="ltr">#{cat.displayOrder}</span></span>
+                      {dir === 'rtl' ? (
+                        <ArrowLeft className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#0B2346] transition-transform group-hover:-translate-x-1" />
+                      ) : (
+                        <ArrowRight className="w-3.5 h-3.5 text-gray-400 group-hover:text-[#0B2346] transition-transform group-hover:translate-x-1" />
+                      )}
                     </div>
                   </div>
                 );

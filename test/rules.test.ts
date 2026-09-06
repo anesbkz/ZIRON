@@ -1491,3 +1491,90 @@ describe('PHASE 17 — ENTITLEMENT STATUS AUTHORIZATION HARDENING & REGRESSION M
     );
   });
 });
+
+describe('PHASE 18 — 3-CONTAINER RESTART SCHOOL & QUALIFYING COUNT SECURITY AUDIT', () => {
+  const custId = 'cust-qual-test';
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const adminDb = context.firestore();
+      await setDoc(doc(adminDb, 'users', custId), {
+        uid: custId,
+        email: `${custId}@ziron.dz`,
+        status: 'active',
+        roles: ['CUSTOMER'],
+        schoolAccess: false,
+        communityAccess: true,
+        qualifyingContainerCount: 2,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    });
+  });
+
+  it('1. Customer cannot forge qualifyingContainerCount > 0 on initial user registration', async () => {
+    const newCust = 'cust-new-fraud';
+    const db = testEnv.authenticatedContext(newCust).firestore();
+    await assertFails(
+      setDoc(doc(db, 'users', newCust), {
+        uid: newCust,
+        email: `${newCust}@ziron.dz`,
+        status: 'active',
+        roles: ['CUSTOMER'],
+        schoolAccess: false,
+        communityAccess: false,
+        qualifyingContainerCount: 3, // Tampering attempt: claim 3 containers at registration
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  });
+
+  it('2. Customer cannot update qualifyingContainerCount from 2 to 3 directly', async () => {
+    const db = testEnv.authenticatedContext(custId).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'users', custId), {
+        qualifyingContainerCount: 3,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  });
+
+  it('3. Customer cannot set schoolAccess: true directly on their user document', async () => {
+    const db = testEnv.authenticatedContext(custId).firestore();
+    await assertFails(
+      updateDoc(doc(db, 'users', custId), {
+        schoolAccess: true,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+  });
+
+  it('4. Customer cannot write to activations collection to fake container activation', async () => {
+    const db = testEnv.authenticatedContext(custId).firestore();
+    await assertFails(
+      setDoc(doc(db, 'activations', `${custId}_ACT_FAKE_03`), {
+        id: `${custId}_ACT_FAKE_03`,
+        userId: custId,
+        code: 'ZR-FAKE-0003-ABCD',
+        productSku: 'ZIRON Phase 03',
+        status: 'active',
+        activatedAt: new Date().toISOString(),
+      })
+    );
+  });
+
+  it('5. Customer cannot write to entitlements collection to self-grant SCHOOL_ACCESS', async () => {
+    const db = testEnv.authenticatedContext(custId).firestore();
+    await assertFails(
+      setDoc(doc(db, 'entitlements', `${custId}_SCHOOL_ACCESS`), {
+        id: `${custId}_SCHOOL_ACCESS`,
+        userId: custId,
+        entitlementType: 'SCHOOL_ACCESS',
+        status: 'ACTIVE',
+        grantedAt: new Date().toISOString(),
+      })
+    );
+  });
+});
+

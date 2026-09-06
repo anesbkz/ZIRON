@@ -192,6 +192,36 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
       orderBundle: 'Select Complete Bundle',
       individualTitle: 'Individual Program Phase Containers',
     },
+    school: {
+      heroBadge: 'CONTINUOUS MASTERY & CURRICULA',
+      heroTitle: 'The ZIRON School of Biopharma & Applied Mastery',
+      heroSubtitle:
+        'A dynamic educational ecosystem bridging human biology, metabolic optimization, precision agriculture, digital literacy, and high-impact enterprise execution.',
+      enterPortalBtn: 'Enter School Portal',
+      enrollBtn: 'Enroll to Unlock Curricula',
+      verifyCodeBtn: 'Verify Container Code',
+      tracksAvailable: 'Curriculum Tracks Available',
+      trackNumber: 'Track',
+      qualificationNotice: 'Restart School requires 3 activated product containers.',
+    },
+    community: {
+      heroBadge: 'SUBJECT COLLABORATION NETWORK',
+      heroTitle: 'The ZIRON Verified Community',
+      heroSubtitle:
+        'A private, moderated forum connecting participants traversing the 90-day biological trajectory.',
+      enterCommunityBtn: 'Enter Community',
+      enrollBtn: 'Enroll for Access',
+      verifyCodeBtn: 'Verify Container Code',
+      shieldTitle: 'Verified Physical Ownership',
+      shieldDesc:
+        'Entry requires serial verification from a genuine ZIRON 30-capsule phase container, ensuring discussions remain evidence-based and authentic.',
+      cohortTitle: 'Phase-Cohort Synchrony',
+      cohortDesc:
+        'Connect with subjects currently in Phase 01, Phase 02, or Phase 03 to compare trajectories.',
+      moderationTitle: 'Scientific Oversight',
+      moderationDesc:
+        'Dedicated bio-scientific moderators ensure peer interactions remain constructive, safe, and aligned with evidence standards.',
+    },
     footer: {
       description:
         'VIREXON BIOSCIENCES develops structured phase-based wellness protocols and verified product standards.',
@@ -391,6 +421,36 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
       orderBundle: 'Sélectionner le Pack Complet',
       individualTitle: 'Contenants Individuels par Phase du Programme',
     },
+    school: {
+      heroBadge: 'MAÎTRISE CONTINUE & CURRICULUMS',
+      heroTitle: 'L’École ZIRON de Biopharmacie et Maîtrise Appliquée',
+      heroSubtitle:
+        'Un écosystème pédagogique reliant biologie humaine, optimisation métabolique, agriculture de précision et compétences d’entreprise.',
+      enterPortalBtn: 'Accéder au Portail Scolaire',
+      enrollBtn: 'S’inscrire pour débloquer les cursus',
+      verifyCodeBtn: 'Vérifier le Code Produit',
+      tracksAvailable: 'Filières Disponibles',
+      trackNumber: 'Filière',
+      qualificationNotice: 'Restart School exige l’activation de 3 contenants de produits différents.',
+    },
+    community: {
+      heroBadge: 'RÉSEAU D’ÉCHANGE DES PARTICIPANTS',
+      heroTitle: 'La Communauté Vérifiée ZIRON',
+      heroSubtitle:
+        'Un forum privé et modéré reliant les participants engagés dans la trajectoire de 90 jours.',
+      enterCommunityBtn: 'Accéder à la Communauté',
+      enrollBtn: 'S’inscrire pour Accéder',
+      verifyCodeBtn: 'Vérifier le Code Produit',
+      shieldTitle: 'Propriété Physique Vérifiée',
+      shieldDesc:
+        'L’accès requiert la vérification du numéro de série d’un contenant authentique ZIRON de 30 gélules.',
+      cohortTitle: 'Cohorte Synchronisée par Phase',
+      cohortDesc:
+        'Échangez avec des participants se trouvant dans la même phase de progression.',
+      moderationTitle: 'Supervision Scientifique',
+      moderationDesc:
+        'Une modération dédiée veille à ce que les échanges demeurent rigoureux et bienveillants.',
+    },
     footer: {
       description:
         'VIREXON BIOSCIENCES conçoit des protocoles de bien-être par phases et des standards de produits vérifiables.',
@@ -406,11 +466,11 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
       product: 'ZIRON',
       tagline: 'عافية هيكلية وروتين غذائي موجه بالمراحل',
       nonMedicalDisclaimer:
-        'زايرون هو برنامج عافية غذائي منظم. وليس مخصصًا لتشخيص أي مرض أو اضطراب نفسي أو إدماني أو علاجه أو الوقاية منه. ولا يُعد بديلاً عن الرعاية الطبية السريرية أو العلاج النفسي. استشر دائمًا طبيبًا أو ممارسًا صحيًا مرخصًا بشأن خياراتك الصحية.',
+        'ZIRON هو برنامج عافية غذائي منظم. وليس مخصصًا لتشخيص أي مرض أو اضطراب نفسي أو إدماني أو علاجه أو الوقاية منه. ولا يُعد بديلاً عن الرعاية الطبية السريرية أو العلاج النفسي. استشر دائمًا طبيبًا أو ممارسًا صحيًا مرخصًا بشأن خياراتك الصحية.',
       manufacturingNotice: 'سيتم نشر وثائق التصنيع والجودة فور توفرها واعتمادها.',
     },
     nav: {
-      product: 'زايرون',
+      product: 'ZIRON',
       program: 'برنامج الـ 90 يومًا',
       science: 'الأساس العلمي',
       quality: 'الجودة',
@@ -430,7 +490,7 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
       heroTitle: 'روتين يومي بالمراحل وانتظام غذائي مدروس.',
       heroSubtitle:
         'بروتوكول تتابعي مدته 90 يومًا منظم عبر ثلاث مراحل محددة. يجمع بين عادات التناول اليومية المنتظمة، والتوجيه التعليمي، والتحقق من أصالة كل عبوة.',
-      primaryCta: 'استكشف زايرون',
+      primaryCta: 'استكشف ZIRON',
       secondaryCta: 'استكشف برنامج الـ 90 يومًا',
       phasesHeader: 'ثلاث مراحل. رحلة واحدة.',
       phasesDescription:
@@ -447,11 +507,11 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
         'رموز تحقق فريدة مطبوعة على كل عبوة لتأكيد أصالة المنتج وسلامته.',
       verificationSectionTitle: 'التحقق من أصالة المنتج',
       verificationSectionBody:
-        'تحمل كل عبوة من عبوات زايرون رمز تحقق فريدًا من نوعه. يرجى التحقق من عبوتك قبل بدء البرنامج.',
+        'تحمل كل عبوة من عبوات ZIRON رمز تحقق فريدًا من نوعه. يرجى التحقق من عبوتك قبل بدء البرنامج.',
     },
     ziron: {
       dossierTag: 'مواصفات المنتج',
-      title: 'نظام منتج زايرون',
+      title: 'نظام منتج ZIRON',
       subtitle:
         'ثلاث عبوات متسلسلة لـ 30 يومًا لكل مرحلة من مراحل البرنامج. تحتوي كل عبوة على 30 كبسولة تكفي لمرحلة برنامج مدتها 30 يومًا.',
       phase1Title: 'المرحلة الأولى — مرحلة البرنامج',
@@ -465,7 +525,7 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
         'العبوة 03: 30 كبسولة / إمداد لـ 30 يومًا. مخصصة للأيام من 61 إلى 90 لتعزيز الاستقلالية واستدامة نمط الحياة الصحي.',
       qualityCardTitle: 'نزاهة التركيبة ومعايير الجودة',
       qualityCardBody:
-        'يتم إنتاج منتجات زايرون وفق معايير صارمة لمراقبة الجودة. سيتم نشر وثائق التصنيع والجودة فور توفرها واعتمادها.',
+        'يتم إنتاج منتجات ZIRON وفق معايير صارمة لمراقبة الجودة. سيتم نشر وثائق التصنيع والجودة فور توفرها واعتمادها.',
     },
     program: {
       timelineTag: 'المخطط الزمني التتابعي',
@@ -512,17 +572,17 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
     },
     about: {
       tag: 'نظرة عامة على الشركة',
-      title: 'عن فايركسون للعلوم الحيوية',
+      title: 'عن VIREXON BIOSCIENCES',
       subtitle: 'مبادئ التكنولوجيا الحيوية المطبقة على العافية المنظمة والوضوح التغذوي.',
       missionTitle: 'رسالتنا',
       missionBody:
-        'تأسست فايركسون للعلوم الحيوية للمواءمة بين انضباط التركيبات وبروتوكولات العادات اليومية المنظمة بالمراحل.',
+        'تأسست VIREXON BIOSCIENCES للمواءمة بين انضباط التركيبات وبروتوكولات العادات اليومية المنظمة بالمراحل.',
       standardsTitle: 'معايير الشفافية',
       standardsBody:
         'نؤمن بالشفافية الكاملة في البيانات الملصقة، والتعريف التسلسلي الموثوق للمنتجات، والتواصل الصادق غير المبالغ فيه.',
       governanceTitle: 'الحوكمة المؤسسية',
       governanceBody:
-        'تطور فايركسون للعلوم الحيوية حلولاً صحية عالية الجودة مع إمكانية التتبع والمسؤولية الكاملة عن المكونات.',
+        'تطور VIREXON BIOSCIENCES حلولاً صحية عالية الجودة مع إمكانية التتبع والمسؤولية الكاملة عن المكونات.',
     },
     restart: {
       tag: 'إرشادات البروتوكول',
@@ -540,7 +600,7 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
     faq: {
       tag: 'قاعدة المعرفة',
       title: 'الأسئلة الشائعة',
-      subtitle: 'إجابات أساسية حول منتجات زايرون وبرنامج الـ 90 يومًا.',
+      subtitle: 'إجابات أساسية حول منتجات ZIRON وبرنامج الـ 90 يومًا.',
       items: [
         {
           question: 'كم عدد الكبسولات في كل عبوة مرحلية؟',
@@ -548,9 +608,9 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
             'تحتوي كل عبوة مرحلية (المرحلة 01، المرحلة 02، والمرحلة 03) على 30 كبسولة بالضبط تكفي لـ 30 يومًا. وتحتوي حزمة البرنامج الكاملة على 90 كبسولة إجمالاً (3 × 30 كبسولة).',
         },
         {
-          question: 'هل زايرون علاج طبي أو دواء صيدلاني؟',
+          question: 'هل ZIRON علاج طبي أو دواء صيدلاني؟',
           answer:
-            'كلا. زايرون برنامج عافية ونمط حياة صحي منظم، وليس دواءً صيدلانيًا أو علاجًا سريريًا. يُرجى استشارة طبيب مرخص بشأن أي احتياجات صحية.',
+            'كلا. ZIRON برنامج عافية ونمط حياة صحي منظم، وليس دواءً صيدلانيًا أو علاجًا سريريًا. يُرجى استشارة طبيب مرخص بشأن أي احتياجات صحية.',
         },
         {
           question: 'كيف أتحقق من أصالة عبوة المنتج؟',
@@ -566,7 +626,7 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
     },
     verify: {
       badge: 'التحقق من أصالة المنتج',
-      title: 'تحقق من منتج زايرون',
+      title: 'تحقق من منتج ZIRON',
       subtitle:
         'افحص رمز التحقق الموجود على عبوتك للتأكد من أصالة المنتج.',
       inputLabel: 'رمز التحقق الفريد للمنتج',
@@ -580,22 +640,52 @@ export const SITE_CONTENT: Record<Locale, SiteContent> = {
     },
     shop: {
       tag: 'الكتالوج والطلبات',
-      title: 'كتالوج منتجات زايرون',
+      title: 'كتالوج منتجات ZIRON',
       subtitle:
         'اطلب عبوات المراحل الفردية أو حزمة برنامج الـ 90 يومًا الكاملة. التسعير مهيأ لسوق الإطلاق في الجزائر (DZD).',
-      bundleTitle: 'حزمة برنامج الـ 90 يومًا الكاملة من زايرون',
+      bundleTitle: 'حزمة برنامج الـ 90 يومًا الكاملة من ZIRON',
       bundleSubtitle: 'طقم كامل في ثلاث مراحل يضم العبوات الثلاث التي تحوي 30 كبسولة لكل منها.',
       bundleSpecs: '3 عبوات × 30 كبسولة = 90 كبسولة إجمالاً (إمداد لـ 90 يومًا)',
       addToCart: 'اختيار العبوة',
       orderBundle: 'اختيار الحزمة الكاملة',
       individualTitle: 'عبوات مراحل البرنامج الفردية',
     },
+    school: {
+      heroBadge: 'التعلم المستمر والمناهج التطبيقية',
+      heroTitle: 'مدرسة ZIRON للعلوم الحيوية والتمكن التطبيقي',
+      heroSubtitle:
+        'منظومة تعليمية متكاملة تربط بين البيولوجيا البشرية، والتغذية الحيوية، والزراعة الدقيقة، ومحو الأمية الرقمية، وبناء المشاريع ذات الأثر.',
+      enterPortalBtn: 'دخول بوابة المدرسة',
+      enrollBtn: 'الانضمام لفتح المناهج',
+      verifyCodeBtn: 'التحقق من رمز العبوة',
+      tracksAvailable: 'مسارات تعليمية متاحة',
+      trackNumber: 'المسار',
+      qualificationNotice: 'تتطلب مدرسة Restart تفعيل 3 عبوات منتجات مختلفة.',
+    },
+    community: {
+      heroBadge: 'شبكة تواصل المشاركين',
+      heroTitle: 'مجتمع ZIRON المعتمد',
+      heroSubtitle:
+        'منتدى خاص ومراقب يجمع المشاركين خلال مسار الـ 90 يومًا لتبادل الخبرات وتنسيق البروتوكول.',
+      enterCommunityBtn: 'دخول المجتمع',
+      enrollBtn: 'الانضمام للحصول على الوصول',
+      verifyCodeBtn: 'التحقق من رمز العبوة',
+      shieldTitle: 'ملكية موثقة للمنتج',
+      shieldDesc:
+        'يتطلب الدخول التحقق التسلسلي من عبوة حقيقية تحوي 30 كبسولة من ZIRON لضمان مصداقية المشاركات وواقعيتها.',
+      cohortTitle: 'توافق المراحل التتابعية',
+      cohortDesc:
+        'تواصل مع مشاركين يمرون حاليًا بنفس مرحلتك (المرحلة 01، المرحلة 02، أو المرحلة 03) لمقارنة النتائج.',
+      moderationTitle: 'إشراف علمي متخصص',
+      moderationDesc:
+        'يشرف خبراء ومختصون على سلامة المعلومات وضمان التزام النقاشات بالمعايير العلمية السليمة.',
+    },
     footer: {
       description:
-        'تطور فايركسون للعلوم الحيوية بروتوكولات عافية بالمراحل ومعايير منتجات موثقة.',
+        'تطور VIREXON BIOSCIENCES بروتوكولات عافية بالمراحل ومعايير منتجات موثقة.',
       mandatoryHealthNotice:
-        'إخلاء مسؤولية صحي: زايرون هو برنامج عافية غذائي ولا يغني عن الاستشارة الطبية المتخصصة أو التشخيص السريري أو الرعاية النفسية. استشر دائمًا ممارسًا صحيًا مرخصًا.',
-      copyrightNotice: 'فايركسون للعلوم الحيوية. جميع الحقوق محفوظة.',
+        'إخلاء مسؤولية صحي: ZIRON هو برنامج عافية غذائي ولا يغني عن الاستشارة الطبية المتخصصة أو التشخيص السريري أو الرعاية النفسية. استشر دائمًا ممارسًا صحيًا مرخصًا.',
+      copyrightNotice: 'VIREXON BIOSCIENCES. جميع الحقوق محفوظة.',
       securityTag: 'نظام معرف المنتج التسلسلي',
     },
   },

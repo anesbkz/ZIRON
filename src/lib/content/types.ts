@@ -152,6 +152,31 @@ export interface SiteContent {
     orderBundle: string;
     individualTitle: string;
   };
+  school: {
+    heroBadge: string;
+    heroTitle: string;
+    heroSubtitle: string;
+    enterPortalBtn: string;
+    enrollBtn: string;
+    verifyCodeBtn: string;
+    tracksAvailable: string;
+    trackNumber: string;
+    qualificationNotice: string;
+  };
+  community: {
+    heroBadge: string;
+    heroTitle: string;
+    heroSubtitle: string;
+    enterCommunityBtn: string;
+    enrollBtn: string;
+    verifyCodeBtn: string;
+    shieldTitle: string;
+    shieldDesc: string;
+    cohortTitle: string;
+    cohortDesc: string;
+    moderationTitle: string;
+    moderationDesc: string;
+  };
   footer: {
     description: string;
     mandatoryHealthNotice: string;

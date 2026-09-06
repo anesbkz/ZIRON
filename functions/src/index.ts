@@ -385,14 +385,40 @@ export const activateContainerCode = functions.https.onCall(async (data, context
     if (codeData.isActivated) {
       throw new functions.https.HttpsError(
         'already-exists',
-        `This product container code was already activated on ${codeData.activatedAt || 'an earlier date'}.`
+        'This container has already been activated.'
       );
     }
+
+    // Authoritative qualification logic:
+    // Restart School access requires THREE DIFFERENT PRODUCT CONTAINERS successfully activated by the SAME user.
+    // Uniqueness is strictly based on distinct container/code identity (not phase, not SKU).
+    // Retrieve user's existing activation records within the transaction to calculate distinct activated containers.
+    const userActivationsQuery = db.collection('activations').where('userId', '==', callerUid);
+    const existingActivationsSnap = await transaction.get(userActivationsQuery);
+
+    const distinctContainerCodes = new Set<string>();
+    existingActivationsSnap.docs.forEach((doc) => {
+      const codeVal = (doc.data().code || '').trim().toUpperCase();
+      if (codeVal) {
+        distinctContainerCodes.add(codeVal);
+      }
+    });
+    // Add current container being activated
+    distinctContainerCodes.add(rawCode);
+    const qualifyingContainerCount = distinctContainerCodes.size;
+
+    // Check if user already holds an earned SCHOOL_ACCESS entitlement (Earned Access Rule)
+    // Once unlocked, School access is earned and not revoked by subsequent product state changes.
+    const schoolEntDocRef = db.collection('entitlements').doc(`${callerUid}_SCHOOL_ACCESS`);
+    const schoolEntSnap = await transaction.get(schoolEntDocRef);
+    const hasEarnedSchoolAccess = schoolEntSnap.exists && schoolEntSnap.data()?.status === 'ACTIVE';
+
+    const qualifiesForSchool = qualifyingContainerCount >= 3 || hasEarnedSchoolAccess;
 
     const now = new Date().toISOString();
     const productSku = codeData.productSku || 'VIR-CONTAINER-DEFAULT';
 
-    // 1. Mark code as activated
+    // 1. Mark code as activated (permanently bound to callerUid)
     transaction.update(codeDocRef, {
       isActivated: true,
       activatedByUserId: callerUid,
@@ -400,9 +426,14 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       updatedAt: now,
     });
 
-    // 2. Create activation record
+    // 2. Base container entitlements granted on every container
+    const entitlementsToGrant: string[] = ['COMMUNITY_ACCESS', 'PHASE_TRAJECTORY'];
+    if (qualifiesForSchool) {
+      entitlementsToGrant.push('SCHOOL_ACCESS');
+    }
+
+    // 3. Create activation record
     const activationDocRef = db.collection('activations').doc();
-    const entitlementsToGrant = ['COMMUNITY_ACCESS', 'SCHOOL_ACCESS', 'PHASE_TRAJECTORY'];
     transaction.set(activationDocRef, {
       id: activationDocRef.id,
       code: rawCode,
@@ -410,10 +441,11 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       productSku,
       activatedAt: now,
       entitlementsGranted: entitlementsToGrant,
+      qualifyingContainerCount,
     });
 
-    // 3. Create Authoritative Entitlement records (keyed deterministically: userId_type)
-    for (const entType of entitlementsToGrant) {
+    // 4. Create/update Authoritative Entitlement records for container perks
+    for (const entType of ['COMMUNITY_ACCESS', 'PHASE_TRAJECTORY']) {
       const entDocRef = db.collection('entitlements').doc(`${callerUid}_${entType}`);
       transaction.set(entDocRef, {
         id: `${callerUid}_${entType}`,
@@ -426,18 +458,38 @@ export const activateContainerCode = functions.https.onCall(async (data, context
         grantedAt: now,
         expiresAt: null,
         grantedBy: 'PRODUCT_ACTIVATION',
-      });
+      }, { merge: true });
     }
 
-    // 4. Update user profile quick access flags (CACHE/UI ONLY hints)
-    const userDocRef = db.collection('users').doc(callerUid);
-    transaction.update(userDocRef, {
-      communityAccess: true,
-      schoolAccess: true,
-      updatedAt: now,
-    });
+    // 5. Authoritatively manage SCHOOL_ACCESS entitlement
+    if (qualifiesForSchool) {
+      transaction.set(schoolEntDocRef, {
+        id: `${callerUid}_SCHOOL_ACCESS`,
+        userId: callerUid,
+        entitlementType: 'SCHOOL_ACCESS',
+        sourceProductSku: productSku,
+        sourceCode: rawCode,
+        source: 'THREE_CONTAINERS',
+        activationId: activationDocRef.id,
+        status: 'ACTIVE',
+        grantedAt: schoolEntSnap.exists && schoolEntSnap.data()?.grantedAt ? schoolEntSnap.data()?.grantedAt : now,
+        unlockedAt: schoolEntSnap.exists && schoolEntSnap.data()?.unlockedAt ? schoolEntSnap.data()?.unlockedAt : now,
+        expiresAt: null,
+        grantedBy: 'THREE_CONTAINERS',
+        qualifyingContainerCount,
+      }, { merge: true });
+    }
 
-    // 5. Authoritative activation audit log
+    // 6. Update user profile quick access flags (CACHE/UI ONLY hints)
+    const userDocRef = db.collection('users').doc(callerUid);
+    transaction.set(userDocRef, {
+      communityAccess: true,
+      schoolAccess: qualifiesForSchool,
+      qualifyingContainerCount,
+      updatedAt: now,
+    }, { merge: true });
+
+    // 7. Authoritative activation audit log
     const auditDocRef = db.collection('auditLogs').doc();
     transaction.set(auditDocRef, {
       id: auditDocRef.id,
@@ -452,6 +504,8 @@ export const activateContainerCode = functions.https.onCall(async (data, context
         code: rawCode,
         productSku,
         activationId: activationDocRef.id,
+        qualifyingContainerCount,
+        schoolUnlocked: qualifiesForSchool,
         enforcedBy: 'SERVER_TRANSACTION',
       },
     });
@@ -460,6 +514,8 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       success: true,
       activationId: activationDocRef.id,
       entitlements: entitlementsToGrant,
+      qualifyingContainerCount,
+      schoolUnlocked: qualifiesForSchool,
     };
   });
 });

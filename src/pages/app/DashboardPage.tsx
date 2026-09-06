@@ -4,6 +4,7 @@ import { useI18n } from '@/context/I18nContext';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   User,
   Shield,
@@ -11,6 +12,7 @@ import {
   MessageSquare,
   QrCode,
   ArrowRight,
+  ArrowLeft,
   Clock,
   Sparkles,
   Lock,
@@ -21,20 +23,20 @@ import {
   Package,
   Compass,
   Calendar,
-  Layers,
-  Award,
   Loader2,
 } from 'lucide-react';
 import { calculateProfileCompleteness } from '@/lib/validation/profileValidation';
 
 export const DashboardPage: React.FC = () => {
   const { user, profile, loading: authLoading, isStaff } = useAuth();
-  const { navigate } = useI18n();
+  const { locale, dir, navigate } = useI18n();
+  const t = getAppTranslations(locale);
   const {
     loading: entLoading,
     hasActivatedProduct,
     hasCommunityAccess,
     hasSchoolAccess,
+    qualifyingContainerCount,
     activations,
     entitlements,
     latestActivation,
@@ -44,7 +46,7 @@ export const DashboardPage: React.FC = () => {
     return (
       <div className="py-24 text-center text-xs font-mono text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-        SYNCHRONIZING PARTICIPANT PROFILE & ENTITLEMENTS...
+        {t.common.verifying}
       </div>
     );
   }
@@ -55,12 +57,12 @@ export const DashboardPage: React.FC = () => {
         <div className="max-w-md mx-auto px-4 text-center">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
-            <h1 className="text-xl font-bold text-[#0B2346] mb-2">Authentication Required</h1>
+            <h1 className="text-xl font-bold text-[#0B2346] mb-2">{t.shell.authRequiredTitle}</h1>
             <p className="text-xs text-gray-600 mb-6">
-              Sign in to view your verified participant dashboard.
+              {t.shell.authRequiredDesc}
             </p>
-            <Button onClick={() => navigate('login')} variant="primary" size="md" className="w-full">
-              Authenticate
+            <Button onClick={() => navigate('login')} variant="primary" size="md" className="w-full cursor-pointer">
+              {t.common.signIn}
             </Button>
           </div>
         </div>
@@ -80,15 +82,15 @@ export const DashboardPage: React.FC = () => {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider border border-blue-100">
                 <User className="w-3.5 h-3.5 text-[#0B2346]" />
-                <span>PARTICIPANT PROFILE DOSSIER</span>
+                <span>{t.dashboard.dossierBadge}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346] tracking-tight">
                 {profile?.firstName && profile?.lastName
                   ? `${profile.firstName} ${profile.lastName}`
-                  : profile?.displayName || 'Participant'}
+                  : profile?.displayName || t.shell.participant}
               </h1>
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
-                <span className="font-mono text-gray-700 font-medium">{user.email}</span>
+                <span dir="ltr" className="font-mono text-gray-700 font-medium">{user.email}</span>
                 {profile?.country && (
                   <span className="inline-flex items-center gap-1 font-medium">
                     <MapPin className="w-3 h-3 text-gray-400" />
@@ -98,12 +100,12 @@ export const DashboardPage: React.FC = () => {
                 {user.emailVerified ? (
                   <span className="inline-flex items-center gap-1 text-emerald-700 text-[10px] font-bold bg-emerald-50 px-2 py-0.5 border border-emerald-200">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                    Email Verified
+                    {locale === 'ar' ? 'البريد الإلكتروني مفعّل' : locale === 'fr' ? 'Email vérifié' : 'Email Verified'}
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-amber-700 text-[10px] font-bold bg-amber-50 px-2 py-0.5 border border-amber-200">
                     <AlertCircle className="w-3 h-3 text-amber-600" />
-                    Email Pending Verification
+                    {locale === 'ar' ? 'بانتظار تفعيل البريد' : locale === 'fr' ? 'Email en attente de vérification' : 'Email Pending Verification'}
                   </span>
                 )}
               </div>
@@ -112,8 +114,8 @@ export const DashboardPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
               <div className="p-3.5 bg-gray-50 border border-gray-200 min-w-[220px]">
                 <div className="flex items-center justify-between text-[11px] font-bold text-[#0B2346] mb-1.5">
-                  <span className="uppercase tracking-wider">Profile Completeness</span>
-                  <span className="font-mono text-emerald-700">{completeness}%</span>
+                  <span className="uppercase tracking-wider">{t.dashboard.profileCompleteness}</span>
+                  <span dir="ltr" className="font-mono text-emerald-700">{completeness}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-gray-200 overflow-hidden">
                   <div
@@ -131,7 +133,7 @@ export const DashboardPage: React.FC = () => {
                   className="cursor-pointer inline-flex items-center gap-1.5"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
-                  <span>Edit Profile</span>
+                  <span>{t.dashboard.editProfileBtn}</span>
                 </Button>
                 {isStaff && (
                   <Button
@@ -141,7 +143,7 @@ export const DashboardPage: React.FC = () => {
                     className="bg-[#0B2346] cursor-pointer inline-flex items-center gap-1.5"
                   >
                     <Shield className="w-3.5 h-3.5" />
-                    <span>Command Center</span>
+                    <span>{t.common.commandCenter}</span>
                   </Button>
                 )}
               </div>
@@ -156,13 +158,13 @@ export const DashboardPage: React.FC = () => {
               <div className="space-y-2 max-w-2xl">
                 <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-amber-50 text-[#F28C28] text-[10px] font-mono font-bold uppercase tracking-wider">
                   <AlertCircle className="w-3.5 h-3.5" />
-                  <span>NO PRODUCT LINKED</span>
+                  <span>{t.dashboard.noProductLinkedBadge}</span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black text-[#0B2346]">
-                  Activate your ZIRON product
+                  {t.dashboard.noProductLinkedTitle}
                 </h2>
                 <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                  Enter the unique cryptographic verification code found on the security seal of your ZIRON 30-capsule container. Activating your container unlocks the ZIRON Peer Community, ZIRON School curricula, and begins tracking your 90-day trajectory.
+                  {t.dashboard.noProductLinkedDesc}
                 </p>
               </div>
               <div className="shrink-0">
@@ -173,7 +175,7 @@ export const DashboardPage: React.FC = () => {
                   className="w-full sm:w-auto bg-[#F28C28] hover:bg-[#e07b1d] text-white border-none cursor-pointer inline-flex items-center justify-center gap-2"
                 >
                   <QrCode className="w-4 h-4" />
-                  <span>Activate Product</span>
+                  <span>{t.dashboard.activateProductBtn}</span>
                 </Button>
               </div>
             </div>
@@ -184,7 +186,7 @@ export const DashboardPage: React.FC = () => {
               <div className="space-y-2">
                 <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-800 text-[10px] font-mono font-bold uppercase tracking-wider border border-emerald-200">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>VERIFIED PRODUCT CONTAINER ACTIVE</span>
+                  <span>{t.dashboard.productActiveBadge}</span>
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black text-[#0B2346]">
                   {latestActivation?.productSku || 'ZIRON Bio-Formulation Container'}
@@ -192,17 +194,19 @@ export const DashboardPage: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
                   <span className="inline-flex items-center gap-1 font-mono">
                     <Package className="w-3.5 h-3.5 text-gray-400" />
-                    Serial: {latestActivation?.code || 'VERIFIED'}
+                    <span>{t.common.serial}:</span>
+                    <span dir="ltr">{latestActivation?.code || t.common.verified}</span>
                   </span>
                   {latestActivation?.activatedAt && (
                     <span className="inline-flex items-center gap-1 font-mono text-gray-500">
                       <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                      Activated: {new Date(latestActivation.activatedAt).toLocaleDateString()}
+                      <span>{t.common.date}:</span>
+                      <span dir="ltr">{new Date(latestActivation.activatedAt).toLocaleDateString()}</span>
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
                     <CheckCircle2 className="w-3 h-3" />
-                    {entitlements.length} Active Entitlement{entitlements.length > 1 ? 's' : ''}
+                    <span dir="ltr">{entitlements.length}</span> {t.dashboard.activeEntitlementsCount}
                   </span>
                 </div>
               </div>
@@ -214,7 +218,7 @@ export const DashboardPage: React.FC = () => {
                   className="cursor-pointer inline-flex items-center justify-center gap-1.5"
                 >
                   <Compass className="w-4 h-4" />
-                  <span>View My Journey</span>
+                  <span>{t.dashboard.viewJourneyBtn}</span>
                 </Button>
                 <Button
                   onClick={() => navigate('app/products')}
@@ -223,7 +227,7 @@ export const DashboardPage: React.FC = () => {
                   className="cursor-pointer inline-flex items-center justify-center gap-1.5"
                 >
                   <Package className="w-4 h-4" />
-                  <span>Manage Products ({activations.length})</span>
+                  <span>{t.dashboard.manageProductsBtn} (<span dir="ltr">{activations.length}</span>)</span>
                 </Button>
               </div>
             </div>
@@ -246,14 +250,14 @@ export const DashboardPage: React.FC = () => {
                       : 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  {hasCommunityAccess ? 'UNLOCKED' : 'LOCKED'}
+                  {hasCommunityAccess ? t.common.unlocked : t.common.locked}
                 </span>
               </div>
-              <h3 className="text-sm font-bold text-[#0B2346] mb-1">ZIRON Community</h3>
+              <h3 className="text-sm font-bold text-[#0B2346] mb-1">{t.dashboard.communityCardTitle}</h3>
               <p className="text-xs text-gray-600 mb-4 leading-relaxed">
                 {hasCommunityAccess
-                  ? 'Access verified peer discussions, research updates, and official broadcast announcements.'
-                  : 'Requires active product activation. Unlocks peer support and official scientific updates.'}
+                  ? t.dashboard.communityCardDescUnlocked
+                  : t.dashboard.communityCardDescLocked}
               </p>
             </div>
             <div>
@@ -264,8 +268,12 @@ export const DashboardPage: React.FC = () => {
                   size="sm"
                   className="w-full justify-center cursor-pointer inline-flex items-center gap-1"
                 >
-                  <span>Open Forum</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  <span>{t.dashboard.openForumBtn}</span>
+                  {dir === 'rtl' ? (
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  )}
                 </Button>
               ) : (
                 <Button
@@ -275,7 +283,7 @@ export const DashboardPage: React.FC = () => {
                   className="w-full justify-center cursor-pointer inline-flex items-center gap-1"
                 >
                   <Lock className="w-3 h-3 text-gray-500" />
-                  <span>Activate to Unlock</span>
+                  <span>{t.dashboard.activateToUnlockBtn}</span>
                 </Button>
               )}
             </div>
@@ -295,14 +303,19 @@ export const DashboardPage: React.FC = () => {
                       : 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  {hasSchoolAccess ? 'UNLOCKED' : 'LOCKED'}
+                  {hasSchoolAccess ? t.common.unlocked : t.common.locked}
                 </span>
               </div>
-              <h3 className="text-sm font-bold text-[#0B2346] mb-1">ZIRON School</h3>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <h3 className="text-sm font-bold text-[#0B2346]">{t.dashboard.schoolCardTitle}</h3>
+                <span className="text-[10px] font-mono font-bold text-[#0B2346] bg-blue-50 px-1.5 py-0.5">
+                  <span dir="ltr">{Math.min(qualifyingContainerCount, 3)}/3</span> {t.dashboard.schoolProgressBadge}
+                </span>
+              </div>
               <p className="text-xs text-gray-600 mb-4 leading-relaxed">
                 {hasSchoolAccess
-                  ? 'Access structured curricula across digital literacy, precision agriculture, and applied competencies.'
-                  : 'Requires active product activation. Unlocks educational modules and verified certificates.'}
+                  ? t.dashboard.schoolCardDescUnlocked
+                  : t.dashboard.schoolCardDescLocked}
               </p>
             </div>
             <div>
@@ -313,8 +326,12 @@ export const DashboardPage: React.FC = () => {
                   size="sm"
                   className="w-full justify-center cursor-pointer inline-flex items-center gap-1"
                 >
-                  <span>Open Academy</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  <span>{t.dashboard.openSchoolBtn}</span>
+                  {dir === 'rtl' ? (
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  )}
                 </Button>
               ) : (
                 <Button
@@ -324,7 +341,7 @@ export const DashboardPage: React.FC = () => {
                   className="w-full justify-center cursor-pointer inline-flex items-center gap-1"
                 >
                   <Lock className="w-3 h-3 text-gray-500" />
-                  <span>Activate to Unlock</span>
+                  <span>{t.dashboard.activateToUnlockBtn}</span>
                 </Button>
               )}
             </div>
@@ -338,14 +355,16 @@ export const DashboardPage: React.FC = () => {
                   <Compass className="w-5 h-5" />
                 </div>
                 <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-gray-100 text-gray-600">
-                  {hasActivatedProduct ? 'FOUNDATION PHASE' : 'INITIALIZING'}
+                  {hasActivatedProduct
+                    ? (locale === 'ar' ? 'المرحلة التأسيسية' : locale === 'fr' ? 'PHASE FONDATION' : 'FOUNDATION PHASE')
+                    : (locale === 'ar' ? 'قيد البدء' : locale === 'fr' ? 'INITIALISATION' : 'INITIALIZING')}
                 </span>
               </div>
-              <h3 className="text-sm font-bold text-[#0B2346] mb-1">Your ZIRON Journey</h3>
+              <h3 className="text-sm font-bold text-[#0B2346] mb-1">{t.dashboard.journeyCardTitle}</h3>
               <p className="text-xs text-gray-600 mb-4 leading-relaxed">
                 {hasActivatedProduct
-                  ? 'Track your educational progress, community milestones, and personalized wellness resources.'
-                  : 'Start your journey by verifying your product container to begin structured phase tracking.'}
+                  ? t.dashboard.journeyCardDescActive
+                  : t.dashboard.journeyCardDescInactive}
               </p>
             </div>
             <div>
@@ -355,8 +374,16 @@ export const DashboardPage: React.FC = () => {
                 size="sm"
                 className="w-full justify-center cursor-pointer inline-flex items-center gap-1"
               >
-                <span>{hasActivatedProduct ? 'Open Journey' : 'Begin Journey'}</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                <span>
+                  {hasActivatedProduct
+                    ? (locale === 'ar' ? 'فتح المسار' : locale === 'fr' ? 'Ouvrir le parcours' : 'Open Journey')
+                    : (locale === 'ar' ? 'بدء المسار' : locale === 'fr' ? 'Commencer le parcours' : 'Begin Journey')}
+                </span>
+                {dir === 'rtl' ? (
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                ) : (
+                  <ArrowRight className="w-3.5 h-3.5" />
+                )}
               </Button>
             </div>
           </div>
@@ -366,10 +393,16 @@ export const DashboardPage: React.FC = () => {
         <div className="bg-white border border-[#E2E8F0] p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs font-mono uppercase tracking-wider font-bold text-[#0B2346]">
-              Participant Journey Status & Milestones
+              {locale === 'ar'
+                ? 'حالة ومراحل مسار المشارك'
+                : locale === 'fr'
+                ? 'Statut et jalons du parcours'
+                : 'Participant Journey Status & Milestones'}
             </h2>
             <span className="text-[10px] font-mono text-gray-500">
-              {hasActivatedProduct ? 'PHASE 01 • ACTIVE' : 'PENDING ACTIVATION'}
+              {hasActivatedProduct
+                ? (locale === 'ar' ? 'المرحلة 01 • نشط' : locale === 'fr' ? 'PHASE 01 • ACTIF' : 'PHASE 01 • ACTIVE')
+                : (locale === 'ar' ? 'بانتظار التفعيل' : locale === 'fr' ? 'EN ATTENTE D\'ACTIVATION' : 'PENDING ACTIVATION')}
             </span>
           </div>
 
@@ -377,10 +410,18 @@ export const DashboardPage: React.FC = () => {
             <div className="p-8 text-center bg-[#F5F7FA] border border-dashed border-[#E2E8F0]">
               <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <div className="text-xs font-bold text-[#0B2346] mb-1">
-                No Journey Activity Logged
+                {locale === 'ar'
+                  ? 'لا توجد أنشطة مسجلة في المسار'
+                  : locale === 'fr'
+                  ? 'Aucune activité enregistrée'
+                  : 'No Journey Activity Logged'}
               </div>
               <p className="text-[11px] text-gray-500 max-w-md mx-auto mb-4 leading-relaxed">
-                Your structured journey begins once your first 30-capsule ZIRON container is activated. Milestone check-ins, educational achievements, and community contributions will record here.
+                {locale === 'ar'
+                  ? 'يبدأ مسارك المنظم بمجرد تفعيل أول عبوة ZIRON سعة 30 كبسولة. يتم هنا تسجيل إنجازاتك التعليمية ومشاركاتك المجتمعية.'
+                  : locale === 'fr'
+                  ? 'Votre parcours structuré commence dès l\'activation de votre premier flacon ZIRON de 30 gélules.'
+                  : 'Your structured journey begins once your first 30-capsule ZIRON container is activated. Milestone check-ins, educational achievements, and community contributions will record here.'}
               </p>
               <Button
                 onClick={() => navigate('app/products/activate')}
@@ -389,7 +430,7 @@ export const DashboardPage: React.FC = () => {
                 className="cursor-pointer inline-flex items-center gap-1.5"
               >
                 <QrCode className="w-3.5 h-3.5" />
-                <span>Activate Product Code</span>
+                <span>{t.dashboard.activateProductBtn}</span>
               </Button>
             </div>
           ) : (
@@ -397,26 +438,28 @@ export const DashboardPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                 <div className="p-4 bg-gray-50 border border-gray-200">
                   <div className="text-[10px] font-mono uppercase text-gray-500 mb-1">
-                    Verified Containers
+                    {locale === 'ar' ? 'العبوات المفعّلة' : locale === 'fr' ? 'Flacons vérifiés' : 'Verified Containers'}
                   </div>
-                  <div className="text-xl font-bold text-[#0B2346] font-mono">
+                  <div className="text-xl font-bold text-[#0B2346] font-mono" dir="ltr">
                     {activations.length}
                   </div>
                 </div>
                 <div className="p-4 bg-gray-50 border border-gray-200">
                   <div className="text-[10px] font-mono uppercase text-gray-500 mb-1">
-                    Active Entitlements
+                    {locale === 'ar' ? 'الصلاحيات النشطة' : locale === 'fr' ? 'Droits actifs' : 'Active Entitlements'}
                   </div>
-                  <div className="text-xl font-bold text-emerald-700 font-mono">
+                  <div className="text-xl font-bold text-emerald-700 font-mono" dir="ltr">
                     {entitlements.length}
                   </div>
                 </div>
                 <div className="p-4 bg-gray-50 border border-gray-200">
                   <div className="text-[10px] font-mono uppercase text-gray-500 mb-1">
-                    Learning Track
+                    {locale === 'ar' ? 'المسار التعليمي' : locale === 'fr' ? 'Parcours d\'apprentissage' : 'Learning Track'}
                   </div>
                   <div className="text-xl font-bold text-[#0B2346]">
-                    {hasSchoolAccess ? 'Enrolled' : 'Pending'}
+                    {hasSchoolAccess
+                      ? (locale === 'ar' ? 'مسجل' : locale === 'fr' ? 'Inscrit' : 'Enrolled')
+                      : (locale === 'ar' ? 'قيد الانتظار' : locale === 'fr' ? 'En attente' : 'Pending')}
                   </div>
                 </div>
               </div>
@@ -424,8 +467,14 @@ export const DashboardPage: React.FC = () => {
               <div className="p-4 bg-blue-50/60 border border-blue-100 flex items-start gap-3">
                 <Sparkles className="w-4 h-4 text-[#0B2346] shrink-0 mt-0.5" />
                 <div className="text-xs text-gray-700 leading-relaxed">
-                  <span className="font-bold text-[#0B2346]">Next Milestone: </span>
-                  Explore the ZIRON School curricula to select your foundational learning track, and join your peer discussions in the ZIRON Community.
+                  <span className="font-bold text-[#0B2346]">
+                    {locale === 'ar' ? 'الخطوة التالية: ' : locale === 'fr' ? 'Prochaine étape : ' : 'Next Milestone: '}
+                  </span>
+                  {locale === 'ar'
+                    ? 'استكشف مناهج مدرسة ZIRON لاختيار مسارك التأسيسي، وشارك في مناقشات مجتمع ZIRON.'
+                    : locale === 'fr'
+                    ? 'Explorez les programmes de l\'École ZIRON pour choisir votre parcours et rejoignez les discussions communautaires.'
+                    : 'Explore the ZIRON School curricula to select your foundational learning track, and join your peer discussions in the ZIRON Community.'}
                 </div>
               </div>
             </div>

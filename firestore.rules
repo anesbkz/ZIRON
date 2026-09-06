@@ -153,6 +153,7 @@ service cloud.firestore {
           'onboardingCompleted',
           'communityAccess',
           'schoolAccess',
+          'qualifyingContainerCount',
           'xp',
           'level',
           'profileCompleteness'
@@ -162,6 +163,7 @@ service cloud.firestore {
         incoming().status == 'active' &&
         incoming().communityAccess == false &&
         incoming().schoolAccess == false &&
+        (!('qualifyingContainerCount' in incoming()) || incoming().qualifyingContainerCount == 0) &&
         incoming().xp == 0 &&
         incoming().level == 1 &&
         incoming().createdAt is string &&
@@ -169,7 +171,7 @@ service cloud.firestore {
       );
 
       // Profile updates: Only customer modifying own safe demographic fields.
-      // Roles, status, entitlements, and verification flags CANNOT be modified directly by clients.
+      // Roles, status, entitlements, qualifyingContainerCount, and verification flags CANNOT be modified directly by clients.
       // All administrative role updates MUST go through the authoritative assignUserRoles Cloud Function.
       allow update: if (
         isOwner(userId) &&
@@ -197,6 +199,7 @@ service cloud.firestore {
           'status',
           'communityAccess',
           'schoolAccess',
+          'qualifyingContainerCount',
           'xp',
           'level',
           'emailVerified',

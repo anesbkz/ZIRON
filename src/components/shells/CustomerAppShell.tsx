@@ -79,7 +79,7 @@ const CUSTOMER_NAV_ITEMS: NavItem[] = [
   {
     id: 'app/school',
     label: 'ZIRON School',
-    labelAr: 'أكاديمية زيرون',
+    labelAr: 'مدرسة ZIRON',
     labelFr: 'École ZIRON',
     icon: GraduationCap,
     gatedBy: 'SCHOOL_ACCESS',
