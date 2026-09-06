@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+declare const __BUILD_SHA__: string;
+declare const __BUILD_TIME__: string;
+
 interface ImportMetaEnv {
   readonly VITE_FIREBASE_API_KEY?: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
@@ -8,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
   readonly VITE_FIREBASE_APP_ID?: string;
   readonly VITE_FIREBASE_DATABASE_ID?: string;
+  readonly VITE_BUILD_SHA?: string;
+  readonly VITE_BUILD_TIME?: string;
   readonly [key: string]: string | boolean | undefined;
 }
 

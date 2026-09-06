@@ -5,6 +5,7 @@ import { LOCALES } from '@/lib/i18n/config';
 import { Locale, PublicRoute } from '@/types';
 import { Button } from '@/components/design-system/Button';
 import { Shield, Menu, X, Globe, ChevronRight, User, LogOut, ShieldAlert } from 'lucide-react';
+import { BUILD_SHA } from '@/config/version';
 
 export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { locale, setLocale, route, navigate, content, dir } = useI18n();
@@ -347,6 +348,9 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
             </div>
             <div className="flex items-center gap-4 text-[10px] tracking-wider uppercase">
               <span>{content.nav.algeriaMarketTag || 'ALGERIA TARGET MARKET (DZD) • VERIFIED BATCH COMPLIANCE'}</span>
+              <span id="ziron-build-marker" data-testid="ziron-build-sha" className="font-mono text-[9px] text-white/40 lowercase" title={`Build SHA: ${BUILD_SHA}`}>
+                sha:{BUILD_SHA.slice(0, 7)}
+              </span>
             </div>
           </div>
         </div>
