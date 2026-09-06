@@ -4,26 +4,20 @@ import { useI18n } from '@/context/I18nContext';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   Compass,
   CheckCircle2,
-  Calendar,
-  Package,
   GraduationCap,
   MessageSquare,
   QrCode,
-  ArrowRight,
   Clock,
-  Sparkles,
-  Lock,
-  ChevronRight,
-  BookOpen,
-  Award,
 } from 'lucide-react';
 
 export const JourneyPage: React.FC = () => {
   const { user, profile } = useAuth();
-  const { navigate } = useI18n();
+  const { navigate, locale, dir } = useI18n();
+  const t = getAppTranslations(locale);
   const {
     loading,
     hasActivatedProduct,
@@ -39,7 +33,7 @@ export const JourneyPage: React.FC = () => {
     : null;
 
   return (
-    <div className="py-8 sm:py-10 bg-[#F5F7FA]">
+    <div className="py-8 sm:py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Journey Header */}
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 relative overflow-hidden shadow-xs">
@@ -48,13 +42,13 @@ export const JourneyPage: React.FC = () => {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider border border-blue-100">
                 <Compass className="w-3.5 h-3.5 text-[#0B2346]" />
-                <span>STRUCTURED WELLNESS & EDUCATION</span>
+                <span>{t.journey.headerBadge}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346] tracking-tight">
-                Your ZIRON Journey
+                {t.journey.title}
               </h1>
               <p className="text-xs sm:text-sm text-gray-600 max-w-2xl leading-relaxed">
-                Follow your structured trajectory combining nutritional bio-support, applied educational curricula, and verified peer community exchange.
+                {t.journey.subtitle}
               </p>
             </div>
 
@@ -67,15 +61,15 @@ export const JourneyPage: React.FC = () => {
                   className="bg-[#F28C28] hover:bg-[#e07b1d] text-white border-none cursor-pointer inline-flex items-center gap-2"
                 >
                   <QrCode className="w-4 h-4" />
-                  <span>Activate Product</span>
+                  <span>{t.dashboard.activateProductBtn}</span>
                 </Button>
               ) : (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 text-right">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-start">
                   <div className="text-[10px] font-mono font-bold uppercase text-emerald-800">
-                    STATUS: ACTIVE
+                    {t.journey.statusActive}
                   </div>
                   <div className="text-xs text-emerald-700 font-medium">
-                    {startDate ? `Started: ${startDate}` : 'Verified Participant'}
+                    {startDate ? `${t.journey.startedDate}: ${startDate}` : t.shell.participant}
                   </div>
                 </div>
               )}
@@ -90,26 +84,26 @@ export const JourneyPage: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-blue-50 text-[#0B2346]">
-                  PHASE 01
+                  {t.journey.phaseDays}
                 </span>
                 {hasActivatedProduct ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    LINKED
+                    {t.products.linkedEntitlements}
                   </span>
                 ) : (
-                  <span className="text-[10px] font-mono text-gray-400">UNLINKED</span>
+                  <span className="text-[10px] font-mono text-gray-400">0/1</span>
                 )}
               </div>
               <h3 className="text-sm font-bold text-[#0B2346] mb-1">
-                Foundation & Cellular Alignment
+                {t.journey.phase1Title}
               </h3>
               <p className="text-xs text-gray-600 mb-4 leading-relaxed">
-                Initial 30-day foundational protocol with ZIRON micronutrient complexes and routine baseline establishment.
+                {t.journey.phase1Desc}
               </p>
             </div>
             <div className="text-xs font-mono text-gray-500">
-              {hasActivatedProduct ? 'Active phase container' : 'Pending container activation'}
+              {hasActivatedProduct ? t.journey.currentStage : t.shell.lockHintCommunity}
             </div>
           </div>
 
@@ -118,19 +112,19 @@ export const JourneyPage: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-gray-100 text-gray-600">
-                  PHASE 02
+                  {t.journey.phaseDays}
                 </span>
-                <span className="text-[10px] font-mono text-gray-400">FUTURE</span>
+                <span className="text-[10px] font-mono text-gray-400">0/2</span>
               </div>
               <h3 className="text-sm font-bold text-[#0B2346] mb-1">
-                Regeneration & Cognitive Fortification
+                {t.journey.phase2Title}
               </h3>
               <p className="text-xs text-gray-600 mb-4 leading-relaxed">
-                Day 31–60 advanced regimen focusing on sustained stamina, cognitive clarity, and continued curricular progress.
+                {t.journey.phase2Desc}
               </p>
             </div>
             <div className="text-xs font-mono text-gray-400">
-              Requires Phase 02 container serial
+              {locale === 'ar' ? 'يتطلب تفعيل عبوة إضافية' : locale === 'fr' ? 'Nécessite l\'activation d\'un flacon supplémentaire' : 'Requires additional container activation'}
             </div>
           </div>
 
@@ -139,19 +133,19 @@ export const JourneyPage: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 bg-gray-100 text-gray-600">
-                  PHASE 03
+                  {t.journey.phaseDays}
                 </span>
-                <span className="text-[10px] font-mono text-gray-400">FUTURE</span>
+                <span className="text-[10px] font-mono text-gray-400">0/3</span>
               </div>
               <h3 className="text-sm font-bold text-[#0B2346] mb-1">
-                Mastery & Long-Term Vitality
+                {t.journey.phase3Title}
               </h3>
               <p className="text-xs text-gray-600 mb-4 leading-relaxed">
-                Day 61–90 consolidation protocol reinforcing self-directed habit architecture and community leadership.
+                {t.journey.phase3Desc}
               </p>
             </div>
             <div className="text-xs font-mono text-gray-400">
-              Requires Phase 03 container serial
+              {locale === 'ar' ? 'يتطلب 3 عبوات مفعّلة' : locale === 'fr' ? 'Nécessite 3 flacons vérifiés' : 'Requires 3 verified containers'}
             </div>
           </div>
         </div>
@@ -159,9 +153,9 @@ export const JourneyPage: React.FC = () => {
         {/* Available Resources & Next Steps */}
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 shadow-xs space-y-6">
           <div className="border-b border-gray-100 pb-4">
-            <h2 className="text-base font-bold text-[#0B2346]">Available Resources</h2>
+            <h2 className="text-base font-bold text-[#0B2346]">{t.journey.resourcesTitle}</h2>
             <p className="text-xs text-gray-500">
-              Integrated components of your ZIRON trajectory.
+              {t.journey.resourcesSubtitle}
             </p>
           </div>
 
@@ -171,19 +165,19 @@ export const JourneyPage: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <GraduationCap className="w-4 h-4 text-[#0B2346]" />
-                  <span className="text-xs font-bold text-[#0B2346]">Learning</span>
+                  <span className="text-xs font-bold text-[#0B2346]">{t.journey.learningCardTitle}</span>
                 </div>
                 <p className="text-xs text-gray-600 leading-relaxed">
-                  ZIRON School modules covering digital competencies, precision agriculture, and practical entrepreneurship.
+                  {t.journey.learningCardDesc}
                 </p>
               </div>
               <Button
-                onClick={() => navigate(hasSchoolAccess ? 'app/school' : 'app/products/activate')}
+                onClick={() => navigate('app/school')}
                 variant="outline"
                 size="sm"
                 className="shrink-0 cursor-pointer"
               >
-                {hasSchoolAccess ? 'Access' : 'Unlock'}
+                {hasSchoolAccess ? t.school.viewCurriculumBtn : t.common.locked}
               </Button>
             </div>
 
@@ -192,19 +186,19 @@ export const JourneyPage: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-[#2E9E45]" />
-                  <span className="text-xs font-bold text-[#0B2346]">Community</span>
+                  <span className="text-xs font-bold text-[#0B2346]">{t.journey.communityCardTitle}</span>
                 </div>
                 <p className="text-xs text-gray-600 leading-relaxed">
-                  Peer exchange network with verified participants and official announcements from the VIREXON team.
+                  {t.journey.communityCardDesc}
                 </p>
               </div>
               <Button
-                onClick={() => navigate(hasCommunityAccess ? 'app/community' : 'app/products/activate')}
+                onClick={() => navigate('app/community')}
                 variant="outline"
                 size="sm"
                 className="shrink-0 cursor-pointer"
               >
-                {hasCommunityAccess ? 'Access' : 'Unlock'}
+                {hasCommunityAccess ? t.community.newPostBtn : t.common.locked}
               </Button>
             </div>
           </div>
@@ -214,19 +208,19 @@ export const JourneyPage: React.FC = () => {
         <div className="bg-white border border-[#E2E8F0] p-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs font-mono uppercase tracking-wider font-bold text-[#0B2346]">
-              Your Progress & Future Milestones
+              {t.journey.milestonesTitle}
             </h2>
-            <span className="text-[10px] font-mono text-gray-400">FOUNDATION STAGE</span>
+            <span className="text-[10px] font-mono text-gray-400">{t.journey.currentStage}</span>
           </div>
 
           {!hasActivatedProduct ? (
             <div className="p-8 text-center bg-[#F5F7FA] border border-dashed border-[#E2E8F0]">
               <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
               <div className="text-xs font-bold text-[#0B2346] mb-1">
-                Milestones Awaiting Initial Activation
+                {t.journey.milestonesEmptyTitle}
               </div>
               <p className="text-xs text-gray-500 max-w-md mx-auto mb-4 leading-relaxed">
-                Your personal progression timeline will be initiated once your first container is verified.
+                {t.journey.milestonesEmptyDesc}
               </p>
               <Button
                 onClick={() => navigate('app/products/activate')}
@@ -235,7 +229,7 @@ export const JourneyPage: React.FC = () => {
                 className="cursor-pointer inline-flex items-center gap-1.5"
               >
                 <QrCode className="w-3.5 h-3.5" />
-                <span>Activate First Container</span>
+                <span>{t.dashboard.activateProductBtn}</span>
               </Button>
             </div>
           ) : (
@@ -244,10 +238,10 @@ export const JourneyPage: React.FC = () => {
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-bold text-[#0B2346]">
-                    Container Verification Complete
+                    {t.journey.verificationComplete}
                   </div>
                   <div className="text-[11px] text-gray-500">
-                    Serial {latestActivation?.code} activated on {startDate}. Community and School privileges initialized.
+                    <span dir="ltr">ZIRON</span> {latestActivation?.code ? `• ${latestActivation.code}` : ''} {startDate ? `(${startDate})` : ''}
                   </div>
                 </div>
               </div>
@@ -256,10 +250,10 @@ export const JourneyPage: React.FC = () => {
                 <Clock className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
                 <div>
                   <div className="text-xs font-bold text-gray-700">
-                    Upcoming: 30-Day Checkpoint & School Course Completion
+                    {t.journey.day30Review}
                   </div>
                   <div className="text-[11px] text-gray-500">
-                    Complete your first learning module in ZIRON School to qualify for verified completion credentials.
+                    {t.rewards.checkpoint30Desc}
                   </div>
                 </div>
               </div>

@@ -5,7 +5,8 @@ import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { EntitlementType } from '@/types/entitlements';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
-import { Lock, QrCode, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { Lock, QrCode, Loader2 } from 'lucide-react';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 
 interface CustomerRouteGuardProps {
   children: React.ReactNode;
@@ -17,7 +18,8 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
   requiredEntitlement,
 }) => {
   const { user, loading: authLoading } = useAuth();
-  const { navigate } = useI18n();
+  const { navigate, locale } = useI18n();
+  const t = getAppTranslations(locale);
   const {
     loading: entLoading,
     hasCommunityAccess,
@@ -28,7 +30,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
     return (
       <div className="py-24 text-center text-xs font-mono text-gray-500">
         <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-        VERIFYING PARTICIPANT ACCESS CLEARANCE...
+        {t.common.verifying}
       </div>
     );
   }
@@ -41,10 +43,10 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
             <h1 className="text-xl font-bold text-[#0B2346] mb-2">
-              Authentication Required
+              {t.shell.authRequiredTitle}
             </h1>
             <p className="text-xs text-gray-600 mb-6">
-              Sign in to your ZIRON participant profile to access this area.
+              {t.shell.authRequiredDesc}
             </p>
             <Button
               onClick={() => navigate('login')}
@@ -52,7 +54,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
               size="md"
               className="w-full justify-center"
             >
-              Sign In to Profile
+              {t.common.signIn}
             </Button>
           </div>
         </div>
@@ -75,10 +77,10 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                 ENTITLEMENT LOCKED: COMMUNITY_ACCESS
               </span>
               <h2 className="text-xl font-black text-[#0B2346] mb-3">
-                ZIRON Peer Community Access Required
+                {t.community.lockedTitle}
               </h2>
               <p className="text-xs text-gray-600 leading-relaxed mb-6">
-                The private ZIRON peer discussion forum and official broadcast channels are reserved for participants with an activated ZIRON product container.
+                {t.community.lockedDesc}
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button
@@ -88,7 +90,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                   className="cursor-pointer inline-flex items-center justify-center gap-1.5"
                 >
                   <QrCode className="w-4 h-4" />
-                  <span>Activate Product</span>
+                  <span>{t.dashboard.activateProductBtn}</span>
                 </Button>
                 <Button
                   onClick={() => navigate('app')}
@@ -96,7 +98,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                   size="md"
                   className="cursor-pointer justify-center"
                 >
-                  Back to Dashboard
+                  {t.common.returnHome}
                 </Button>
               </div>
             </div>
@@ -120,10 +122,10 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                 ENTITLEMENT LOCKED: SCHOOL_ACCESS
               </span>
               <h2 className="text-xl font-black text-[#0B2346] mb-3">
-                ZIRON School Curricula Access Required
+                {t.school.lockedTitle}
               </h2>
               <p className="text-xs text-gray-600 leading-relaxed mb-6">
-                Access to the structured learning academy, applied skills modules, and certified course curricula is reserved for active participants with a verified ZIRON product container.
+                {t.school.lockedDesc}
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Button
@@ -133,7 +135,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                   className="cursor-pointer inline-flex items-center justify-center gap-1.5"
                 >
                   <QrCode className="w-4 h-4" />
-                  <span>Activate Product</span>
+                  <span>{t.dashboard.activateProductBtn}</span>
                 </Button>
                 <Button
                   onClick={() => navigate('app')}
@@ -141,7 +143,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                   size="md"
                   className="cursor-pointer justify-center"
                 >
-                  Back to Dashboard
+                  {t.common.returnHome}
                 </Button>
               </div>
             </div>

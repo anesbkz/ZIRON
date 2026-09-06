@@ -82,7 +82,7 @@ export const ActivateProductPage: React.FC = () => {
   };
 
   return (
-    <div className="py-8 sm:py-12 bg-[#F5F7FA]">
+    <div className="py-8 sm:py-12 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Header */}
         <div className="text-center space-y-2">

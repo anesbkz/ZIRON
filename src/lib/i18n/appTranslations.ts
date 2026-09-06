@@ -46,6 +46,8 @@ export interface AppTranslations {
     authRequiredTitle: string;
     authRequiredDesc: string;
     footerDisclaimer: string;
+    lockHintCommunity: string;
+    lockHintSchool: string;
   };
   school: {
     curriculumAccessActive: string;
@@ -186,6 +188,19 @@ export interface AppTranslations {
     phase3Desc: string;
     phaseDays: string;
     currentStage: string;
+    resourcesTitle: string;
+    resourcesSubtitle: string;
+    learningCardTitle: string;
+    learningCardDesc: string;
+    communityCardTitle: string;
+    communityCardDesc: string;
+    milestonesTitle: string;
+    milestonesEmptyTitle: string;
+    milestonesEmptyDesc: string;
+    verificationComplete: string;
+    day30Review: string;
+    day60Review: string;
+    day90Review: string;
   };
   rewards: {
     headerBadge: string;
@@ -201,6 +216,8 @@ export interface AppTranslations {
     curriculumMasteryDesc: string;
     peerEngagementTitle: string;
     peerEngagementDesc: string;
+    returnToJourneyBtn: string;
+    activateProductBtn: string;
   };
   certificates: {
     registryBadge: string;
@@ -212,6 +229,7 @@ export interface AppTranslations {
     exploreSchoolBtn: string;
     verificationStandardTitle: string;
     verificationStandardDesc: string;
+    returnToDashboardBtn: string;
   };
   login: {
     gatewayBadge: string;
@@ -278,6 +296,8 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       authRequiredTitle: 'Authentication Required',
       authRequiredDesc: 'Please authenticate your verified customer profile to access the personalized ZIRON platform.',
       footerDisclaimer: 'Educational & wellness support platform. Neutral bio-scientific research guidance.',
+      lockHintCommunity: 'Activate a container to unlock Community',
+      lockHintSchool: 'Activate 3 different containers to unlock Restart School',
     },
     school: {
       curriculumAccessActive: 'Curriculum Access Active',
@@ -418,6 +438,19 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       phase3Desc: 'Long-term metabolic equilibrium, habit permanence, and advanced wellness resilience.',
       phaseDays: '30 Days',
       currentStage: 'Current Stage',
+      resourcesTitle: 'Available Resources',
+      resourcesSubtitle: 'Integrated components of your ZIRON trajectory.',
+      learningCardTitle: 'Applied Learning',
+      learningCardDesc: 'Access modular courses and practical masterclasses in Restart School.',
+      communityCardTitle: 'Peer Community',
+      communityCardDesc: 'Connect with participants at similar stages of the 90-day trajectory.',
+      milestonesTitle: 'Your Progress & Future Milestones',
+      milestonesEmptyTitle: 'Milestones Awaiting Initial Activation',
+      milestonesEmptyDesc: 'Milestone tracking and adherence logging become available once your initial ZIRON container is activated.',
+      verificationComplete: 'Container Verification Complete',
+      day30Review: 'Day 30 Biomarker & Adherence Review',
+      day60Review: 'Day 60 Trajectory Midpoint Assessment',
+      day90Review: 'Day 90 Comprehensive Protocol Conclusion',
     },
     rewards: {
       headerBadge: 'Milestone Rewards Registry',
@@ -433,6 +466,8 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       curriculumMasteryDesc: 'Earn verified completion badges by finishing courses in Restart School.',
       peerEngagementTitle: 'Peer Collaboration',
       peerEngagementDesc: 'Gain XP by contributing helpful scientific insights in the verified community forum.',
+      returnToJourneyBtn: 'Return to Journey',
+      activateProductBtn: 'Activate Product',
     },
     certificates: {
       registryBadge: 'Credential Registry',
@@ -444,6 +479,7 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       exploreSchoolBtn: 'Explore Restart School',
       verificationStandardTitle: 'Tamper-Proof Verification Standard',
       verificationStandardDesc: 'All Restart School certificates receive a non-enumerable public verification token stored in our public credentials registry.',
+      returnToDashboardBtn: 'Return to Dashboard',
     },
     login: {
       gatewayBadge: 'Secure Auth Gateway',
@@ -508,6 +544,8 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       authRequiredTitle: 'يتطلب التحقق من الهوية',
       authRequiredDesc: 'يرجى تسجيل الدخول إلى ملف المشارك المعتمد للوصول إلى منصة ZIRON الشخصية.',
       footerDisclaimer: 'منصة دعم تعليمي وعافية منظمة. إرشاد علمي وبحثي محايد.',
+      lockHintCommunity: 'فعّل عبوة لفتح المجتمع',
+      lockHintSchool: 'فعّل 3 عبوات مختلفة لفتح مدرسة Restart',
     },
     school: {
       curriculumAccessActive: 'الوصول إلى المناهج التعليمية متاح',
@@ -648,6 +686,19 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       phase3Desc: 'ترسيخ التوازن الحيوي، استدامة العادات المكتسبة، والمرونة الصحية طويلة الأمد.',
       phaseDays: '30 يومًا',
       currentStage: 'المرحلة الحالية',
+      resourcesTitle: 'المصادر والخدمات المتاحة',
+      resourcesSubtitle: 'المكونات المدمجة لمسار ZIRON الخاص بك.',
+      learningCardTitle: 'التعليم التطبيقي',
+      learningCardDesc: 'الوصول إلى الدورات التدريبية والدروس التطبيقية في مدرسة Restart.',
+      communityCardTitle: 'مجتمع الزملاء',
+      communityCardDesc: 'تواصل مع المشاركين الذين يمرون بنفس مراحل مسار الـ 90 يومًا.',
+      milestonesTitle: 'مستوى تقدمك والمحطات القادمة',
+      milestonesEmptyTitle: 'المحطات بانتظار التفعيل الأولي',
+      milestonesEmptyDesc: 'يصبح تتبع المحطات وسجل الالتزام متاحاً بمجرد تفعيل عبوتك الأولى من ZIRON.',
+      verificationComplete: 'اكتمل التحقق من العبوة',
+      day30Review: 'مراجعة المؤشرات الحيوية والالتزام لليوم 30',
+      day60Review: 'تقييم منتصف المسار عند اليوم 60',
+      day90Review: 'اختتام البروتوكول الشامل عند اليوم 90',
     },
     rewards: {
       headerBadge: 'سجل المكافآت والإنجازات',
@@ -663,6 +714,8 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       curriculumMasteryDesc: 'احصل على شارات الإنجاز عند إتمام الدورات التدريبية في مدرسة Restart.',
       peerEngagementTitle: 'المشاركة الفعالة',
       peerEngagementDesc: 'اكتسب نقاط خبرة إضافية بمشاركة تجاربك البناءة وإفادة الزملاء في منتدى المجتمع.',
+      returnToJourneyBtn: 'العودة إلى مساري',
+      activateProductBtn: 'تفعيل عبوة',
     },
     certificates: {
       registryBadge: 'سجل الشهادات والاعتمادات',
@@ -674,6 +727,7 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       exploreSchoolBtn: 'استكشاف مدرسة Restart',
       verificationStandardTitle: 'معيار التحقق المنيع ضد التلاعب',
       verificationStandardDesc: 'تحصل كل شهادة في مدرسة Restart على رمز تحقق عام غير قابل للتخمين ومسجل في قاعدة البيانات العامة للتحقق دون كشف أي بيانات شخصية.',
+      returnToDashboardBtn: 'العودة إلى لوحة التحكم',
     },
     login: {
       gatewayBadge: 'بوابة تسجيل الدخول الآمنة',
@@ -738,6 +792,8 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       authRequiredTitle: 'Authentification Requise',
       authRequiredDesc: 'Veuillez vous authentifier pour accéder à la plateforme personnalisée ZIRON.',
       footerDisclaimer: 'Plateforme éducative et de soutien au bien-être. Orientation scientifique neutre.',
+      lockHintCommunity: 'Activer un contenant pour débloquer la Communauté',
+      lockHintSchool: 'Activez 3 contenants différents pour débloquer Restart School',
     },
     school: {
       curriculumAccessActive: 'Accès aux Curriculums Actif',
@@ -878,6 +934,19 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       phase3Desc: 'Équilibre métabolique durable, autonomie d’hygiène de vie et résilience.',
       phaseDays: '30 Jours',
       currentStage: 'Étape Actuelle',
+      resourcesTitle: 'Ressources Disponibles',
+      resourcesSubtitle: 'Composants intégrés de votre parcours ZIRON.',
+      learningCardTitle: 'Apprentissage Appliqué',
+      learningCardDesc: 'Accédez aux cours modulaires et masterclasses pratiques dans Restart School.',
+      communityCardTitle: 'Communauté de Pairs',
+      communityCardDesc: 'Échangez avec des participants aux mêmes étapes du parcours de 90 jours.',
+      milestonesTitle: 'Votre Progression & Prochains Jalons',
+      milestonesEmptyTitle: 'Jalons en Attente d\'Activation Initiale',
+      milestonesEmptyDesc: 'Le suivi des jalons s\'active dès la validation de votre premier flacon ZIRON.',
+      verificationComplete: 'Vérification du Flacon Effectuée',
+      day30Review: 'Bilan d\'Adhérence et Biomarqueurs au 30e Jour',
+      day60Review: 'Évaluation à Mi-Parcours au 60e Jour',
+      day90Review: 'Bilan Complet de Clôture au 90e Jour',
     },
     rewards: {
       headerBadge: 'Registre des Récompenses & Jalons',
@@ -893,6 +962,8 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       curriculumMasteryDesc: 'Obtenez des badges de certification en terminant des modules de formation dans Restart School.',
       peerEngagementTitle: 'Collaboration entre Pairs',
       peerEngagementDesc: 'Gagnez des points d’expérience en partageant vos retours d’expérience au sein du forum.',
+      returnToJourneyBtn: 'Retour au Parcours',
+      activateProductBtn: 'Activer un Produit',
     },
     certificates: {
       registryBadge: 'Registre des Certificats',
@@ -904,6 +975,7 @@ export const APP_TRANSLATIONS: Record<Locale, AppTranslations> = {
       exploreSchoolBtn: 'Explorer Restart School',
       verificationStandardTitle: 'Norme de Vérification Infalsifiable',
       verificationStandardDesc: 'Chaque certificat dispose d’un identifiant public inviolable consultable dans notre registre de vérification.',
+      returnToDashboardBtn: 'Retour au Tableau de Bord',
     },
     login: {
       gatewayBadge: 'Passerelle d’Accès Sécurisée',

@@ -4,15 +4,13 @@ import { useI18n } from '@/context/I18nContext';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   Package,
   QrCode,
   CheckCircle2,
   Calendar,
   ShieldCheck,
-  ArrowRight,
-  Sparkles,
-  Layers,
   MessageSquare,
   GraduationCap,
   Loader2,
@@ -20,7 +18,8 @@ import {
 
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
-  const { navigate } = useI18n();
+  const { navigate, locale, dir } = useI18n();
+  const t = getAppTranslations(locale);
   const {
     loading,
     hasActivatedProduct,
@@ -29,7 +28,7 @@ export const ProductsPage: React.FC = () => {
   } = useCustomerEntitlements();
 
   return (
-    <div className="py-8 sm:py-10 bg-[#F5F7FA]">
+    <div className="py-8 sm:py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Products Header */}
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 relative overflow-hidden shadow-xs">
@@ -38,13 +37,13 @@ export const ProductsPage: React.FC = () => {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider border border-blue-100">
                 <Package className="w-3.5 h-3.5 text-[#0B2346]" />
-                <span>VERIFIED REGISTRY</span>
+                <span>{t.products.registryBadge}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346] tracking-tight">
-                My Products
+                {t.products.title}
               </h1>
               <p className="text-xs sm:text-sm text-gray-600 max-w-xl leading-relaxed">
-                Review your authenticated ZIRON product containers, verified lot authorizations, and linked platform entitlements.
+                {t.products.subtitle}
               </p>
             </div>
 
@@ -55,7 +54,7 @@ export const ProductsPage: React.FC = () => {
               className="bg-[#0B2346] cursor-pointer inline-flex items-center gap-2 shrink-0 self-start sm:self-auto"
             >
               <QrCode className="w-4 h-4" />
-              <span>Activate New Code</span>
+              <span>{t.products.activateNewBtn}</span>
             </Button>
           </div>
         </div>
@@ -64,7 +63,7 @@ export const ProductsPage: React.FC = () => {
         {loading && (
           <div className="py-16 text-center text-xs font-mono text-gray-500">
             <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-[#0B2346]" />
-            FETCHING AUTHENTICATED CONTAINERS...
+            {t.common.loading}
           </div>
         )}
 
@@ -75,10 +74,10 @@ export const ProductsPage: React.FC = () => {
               <Package className="w-8 h-8 text-gray-400" />
             </div>
             <h2 className="text-lg font-bold text-[#0B2346] mb-2">
-              No Activated Products Recorded
+              {t.products.emptyTitle}
             </h2>
             <p className="text-xs text-gray-600 max-w-md mx-auto mb-6 leading-relaxed">
-              You have not verified any ZIRON product containers yet. Activate the serialized code from your container packaging to link your product and unlock full platform privileges.
+              {t.products.emptyDesc}
             </p>
             <Button
               onClick={() => navigate('app/products/activate')}
@@ -87,7 +86,7 @@ export const ProductsPage: React.FC = () => {
               className="cursor-pointer inline-flex items-center gap-2"
             >
               <QrCode className="w-4 h-4" />
-              <span>Activate Your First Container</span>
+              <span>{t.products.emptyBtn}</span>
             </Button>
           </div>
         )}
@@ -96,14 +95,14 @@ export const ProductsPage: React.FC = () => {
         {!loading && hasActivatedProduct && (
           <div className="space-y-4">
             <div className="text-xs font-mono font-bold uppercase text-gray-500 tracking-wider">
-              Activated Containers ({activations.length})
+              {t.products.activatedContainersCount} ({activations.length})
             </div>
 
             <div className="grid grid-cols-1 gap-4">
               {activations.map((activation) => {
                 const dateStr = activation.activatedAt
                   ? new Date(activation.activatedAt).toLocaleDateString()
-                  : 'Verified';
+                  : t.products.activeAndVerified;
 
                 return (
                   <div
@@ -114,10 +113,10 @@ export const ProductsPage: React.FC = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-mono font-bold uppercase">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          ACTIVE & VERIFIED
+                          {t.products.activeAndVerified}
                         </span>
                         <span className="text-[11px] font-mono bg-gray-100 text-gray-700 px-2 py-0.5">
-                          Code: {activation.code}
+                          {t.common.serial}: <span dir="ltr">{activation.code}</span>
                         </span>
                       </div>
 
@@ -126,18 +125,18 @@ export const ProductsPage: React.FC = () => {
                           {activation.productSku || 'ZIRON Bio-Formulation (30 Capsules)'}
                         </h3>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          Standard 30-day oral nutraceutical bio-alignment phase container.
+                          {t.products.capsuleSpecs}
                         </p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-600">
                         <span className="inline-flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5 text-gray-400" />
-                          Activated: {dateStr}
+                          {t.common.date}: <span dir="ltr">{dateStr}</span>
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          Cryptographic Tamper-Seal Verified
+                          {t.activate.tamperSealBadge}
                         </span>
                       </div>
                     </div>
@@ -145,7 +144,7 @@ export const ProductsPage: React.FC = () => {
                     {/* Granted Entitlements Badges */}
                     <div className="shrink-0 flex flex-col sm:flex-row md:flex-col items-start md:items-end gap-2 border-t md:border-t-0 pt-4 md:pt-0 border-gray-100">
                       <div className="text-[10px] font-mono text-gray-400 uppercase font-bold">
-                        Linked Entitlements
+                        {t.products.linkedEntitlements}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold bg-blue-50 text-[#0B2346] px-2 py-1 border border-blue-100">
@@ -169,12 +168,12 @@ export const ProductsPage: React.FC = () => {
         <div className="bg-white border border-[#E2E8F0] p-6 shadow-xs">
           <div className="flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-[#0B2346] shrink-0 mt-0.5" />
-            <div className="space-y-1 text-xs leading-relaxed text-gray-600">
+            <div className="space-y-1 text-xs leading-relaxed text-gray-600 text-start">
               <div className="font-bold text-[#0B2346] uppercase tracking-wider text-[11px]">
-                Authenticity & Serial Protection Protocol
+                {t.products.authenticityProtocolTitle}
               </div>
               <p>
-                Every individual ZIRON container is produced under strict quality standards and assigned a unique single-use cryptographic serial. Each code can be linked to exactly one verified customer dossier to guarantee origin provenance, lot tracking, and continuous educational support.
+                {t.products.authenticityProtocolDesc}
               </p>
             </div>
           </div>

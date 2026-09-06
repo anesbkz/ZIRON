@@ -96,7 +96,7 @@ export const AppSchoolPage: React.FC = () => {
   // Not authenticated
   if (!user) {
     return (
-      <div className="py-16 bg-[#F5F7FA]">
+      <div className="py-16 bg-[#F5F7FA]" dir={dir}>
         <div className="max-w-md mx-auto px-4 text-center">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
@@ -125,7 +125,7 @@ export const AppSchoolPage: React.FC = () => {
     const progressPercent = Math.round((count / 3) * 100);
 
     return (
-      <div className="py-16 bg-[#F5F7FA]">
+      <div className="py-16 bg-[#F5F7FA]" dir={dir}>
         <div className="max-w-xl mx-auto px-4">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm relative text-center">
             <GridPattern />
@@ -233,7 +233,7 @@ export const AppSchoolPage: React.FC = () => {
 
   // Unlocked State: Full Curriculum Academy
   return (
-    <div className="py-10 bg-[#F5F7FA]">
+    <div className="py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Header Dossier */}
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 relative overflow-hidden">

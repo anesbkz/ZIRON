@@ -53,7 +53,7 @@ export const DashboardPage: React.FC = () => {
 
   if (!user) {
     return (
-      <div className="py-16 bg-[#F5F7FA]">
+      <div className="py-16 bg-[#F5F7FA]" dir={dir}>
         <div className="max-w-md mx-auto px-4 text-center">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
@@ -73,7 +73,7 @@ export const DashboardPage: React.FC = () => {
   const completeness = profile?.profileCompleteness ?? calculateProfileCompleteness(profile);
 
   return (
-    <div className="py-8 sm:py-10 bg-[#F5F7FA]">
+    <div className="py-8 sm:py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Section A: Welcome Dossier Area */}
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 relative overflow-hidden shadow-xs">

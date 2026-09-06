@@ -91,7 +91,7 @@ export const AppCommunityPage: React.FC = () => {
   // Not signed in
   if (!user) {
     return (
-      <div className="py-16 bg-[#F5F7FA]">
+      <div className="py-16 bg-[#F5F7FA]" dir={dir}>
         <div className="max-w-md mx-auto px-4 text-center">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm">
             <Lock className="w-8 h-8 text-[#0B2346] mx-auto mb-3" />
@@ -118,7 +118,7 @@ export const AppCommunityPage: React.FC = () => {
   // Signed in but lacking entitlement
   if (!hasAccess) {
     return (
-      <div className="py-16 bg-[#F5F7FA]">
+      <div className="py-16 bg-[#F5F7FA]" dir={dir}>
         <div className="max-w-lg mx-auto px-4">
           <div className="bg-white border border-[#E2E8F0] p-8 shadow-sm relative text-center">
             <GridPattern />
@@ -181,7 +181,7 @@ export const AppCommunityPage: React.FC = () => {
   }
 
   return (
-    <div className="py-10 bg-[#F5F7FA]">
+    <div className="py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Header Bar */}
         <div className="bg-white border border-[#E2E8F0] p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -301,7 +301,7 @@ export const AppCommunityPage: React.FC = () => {
 
       {/* New Post Modal */}
       {showNewPostModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" dir={dir}>
           <div className="bg-white border border-[#E2E8F0] max-w-lg w-full p-6 shadow-xl relative">
             <button
               onClick={() => setShowNewPostModal(false)}

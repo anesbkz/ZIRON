@@ -4,28 +4,24 @@ import { useI18n } from '@/context/I18nContext';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import { getAppTranslations } from '@/lib/i18n/appTranslations';
 import {
   Gift,
-  Award,
   Sparkles,
-  Clock,
-  CheckCircle2,
-  Lock,
   ArrowRight,
-  Shield,
-  Star,
 } from 'lucide-react';
 
 export const RewardsPage: React.FC = () => {
-  const { user, profile } = useAuth();
-  const { navigate } = useI18n();
+  const { profile } = useAuth();
+  const { navigate, locale, dir } = useI18n();
+  const t = getAppTranslations(locale);
   const { hasActivatedProduct } = useCustomerEntitlements();
 
   const xp = profile?.xp ?? 0;
   const level = profile?.level ?? 1;
 
   return (
-    <div className="py-8 sm:py-10 bg-[#F5F7FA]">
+    <div className="py-8 sm:py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Header */}
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 relative overflow-hidden shadow-xs">
@@ -34,20 +30,20 @@ export const RewardsPage: React.FC = () => {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider border border-blue-100">
                 <Gift className="w-3.5 h-3.5 text-[#0B2346]" />
-                <span>MILESTONE REWARDS REGISTRY</span>
+                <span>{t.rewards.headerBadge}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#0B2346] tracking-tight">
-                ZIRON Rewards & Milestones
+                {t.rewards.title}
               </h1>
               <p className="text-xs sm:text-sm text-gray-600 max-w-xl leading-relaxed">
-                Track your trajectory consistency, protocol check-in milestones, and educational achievements across the ZIRON ecosystem.
+                {t.rewards.subtitle}
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               <div className="p-3 bg-gray-50 border border-gray-200 text-center min-w-[100px]">
                 <div className="text-[10px] font-mono uppercase text-gray-500 font-bold">
-                  Level
+                  {t.rewards.levelLabel}
                 </div>
                 <div className="text-xl font-black text-[#0B2346] font-mono">
                   {level}
@@ -55,7 +51,7 @@ export const RewardsPage: React.FC = () => {
               </div>
               <div className="p-3 bg-gray-50 border border-gray-200 text-center min-w-[100px]">
                 <div className="text-[10px] font-mono uppercase text-gray-500 font-bold">
-                  Total XP
+                  {t.rewards.totalXpLabel}
                 </div>
                 <div className="text-xl font-black text-[#F28C28] font-mono">
                   {xp}
@@ -71,37 +67,37 @@ export const RewardsPage: React.FC = () => {
             <Sparkles className="w-7 h-7" />
           </div>
           <h2 className="text-lg font-bold text-[#0B2346] mb-2">
-            Milestone Rewards Architecture (Phase Foundation)
+            {t.rewards.foundationTitle}
           </h2>
           <p className="text-xs text-gray-600 max-w-md mx-auto mb-6 leading-relaxed">
-            The ZIRON reward and milestone tracking engine is configured to recognize adherence consistency and course curriculum milestones. As you complete structured activities in ZIRON School and log protocol consistency, your milestone achievements will appear here.
+            {t.rewards.foundationDesc}
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto text-left mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto text-start mb-6">
             <div className="p-4 bg-gray-50 border border-gray-200 space-y-1">
               <div className="text-xs font-bold text-[#0B2346]">
-                30-Day Checkpoint
+                {t.rewards.checkpoint30Title}
               </div>
               <p className="text-[11px] text-gray-500">
-                Unlock Phase 01 adherence badge upon completing your initial 30 days.
+                {t.rewards.checkpoint30Desc}
               </p>
             </div>
 
             <div className="p-4 bg-gray-50 border border-gray-200 space-y-1">
               <div className="text-xs font-bold text-[#0B2346]">
-                Curriculum Mastery
+                {t.rewards.curriculumMasteryTitle}
               </div>
               <p className="text-[11px] text-gray-500">
-                Earn verified completion badges by finishing courses in ZIRON School.
+                {t.rewards.curriculumMasteryDesc}
               </p>
             </div>
 
             <div className="p-4 bg-gray-50 border border-gray-200 space-y-1">
               <div className="text-xs font-bold text-[#0B2346]">
-                Peer Contribution
+                {t.rewards.peerEngagementTitle}
               </div>
               <p className="text-[11px] text-gray-500">
-                Receive peer recognition for constructive contributions in the Community.
+                {t.rewards.peerEngagementDesc}
               </p>
             </div>
           </div>
@@ -113,7 +109,7 @@ export const RewardsPage: React.FC = () => {
               size="sm"
               className="cursor-pointer inline-flex items-center gap-1.5"
             >
-              <span>{hasActivatedProduct ? 'Return to Journey' : 'Activate Product'}</span>
+              <span>{hasActivatedProduct ? t.rewards.returnToJourneyBtn : t.rewards.activateProductBtn}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>

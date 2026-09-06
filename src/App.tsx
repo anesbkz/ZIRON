@@ -250,14 +250,14 @@ function RouterOutlet() {
         break;
       case 'app/community':
         appContent = (
-          <CustomerRouteGuard requiredEntitlement="COMMUNITY_ACCESS">
+          <CustomerRouteGuard>
             <AppCommunityPage />
           </CustomerRouteGuard>
         );
         break;
       case 'app/school':
         appContent = (
-          <CustomerRouteGuard requiredEntitlement="SCHOOL_ACCESS">
+          <CustomerRouteGuard>
             <AppSchoolPage />
           </CustomerRouteGuard>
         );
