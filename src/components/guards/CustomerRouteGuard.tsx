@@ -74,7 +74,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                 <Lock className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#F28C28] font-bold block mb-1">
-                ENTITLEMENT LOCKED: COMMUNITY_ACCESS
+                {t.common.locked}: {t.shell.navCommunity}
               </span>
               <h2 className="text-xl font-black text-[#0B2346] mb-3">
                 {t.community.lockedTitle}
@@ -119,7 +119,7 @@ export const CustomerRouteGuard: React.FC<CustomerRouteGuardProps> = ({
                 <Lock className="w-6 h-6" />
               </div>
               <span className="text-[10px] font-mono uppercase tracking-widest text-[#F28C28] font-bold block mb-1">
-                ENTITLEMENT LOCKED: SCHOOL_ACCESS
+                {t.common.locked}: {t.shell.navSchool}
               </span>
               <h2 className="text-xl font-black text-[#0B2346] mb-3">
                 {t.school.lockedTitle}

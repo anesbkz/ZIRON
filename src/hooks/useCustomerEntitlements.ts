@@ -18,6 +18,49 @@ export interface CustomerEntitlementState {
   refresh: () => Promise<void>;
 }
 
+export function evaluateCustomerEntitlements(params: {
+  activations: Pick<ActivationRecord, 'code'>[];
+  entitlements: Pick<EntitlementRecord, 'entitlementType' | 'status'>[];
+  isStaff: boolean;
+  profile?: { schoolAccess?: boolean } | null;
+}) {
+  // Qualification logic:
+  // Count distinct activated container identities (code values) belonging to user from trusted activation records
+  const distinctContainerCodes = new Set<string>();
+  params.activations.forEach((a) => {
+    const codeVal = (a.code || '').trim().toUpperCase();
+    if (codeVal) {
+      distinctContainerCodes.add(codeVal);
+    }
+  });
+  const qualifyingContainerCount = distinctContainerCodes.size;
+
+  // Authoritative entitlement check: Staff bypass OR authoritative ACTIVE entitlement document.
+  const hasCommunityAccess = Boolean(
+    params.isStaff ||
+    params.entitlements.some(
+      (e) => e.entitlementType === 'COMMUNITY_ACCESS' && e.status === 'ACTIVE'
+    )
+  );
+
+  // Authoritative School authorization rule:
+  // isStaff OR qualifyingContainerCount >= 3 OR authoritative active SCHOOL_ACCESS entitlement.
+  // Note: Never relies on client-controlled profile flags or non-active entitlement states.
+  const hasSchoolAccess = Boolean(
+    params.isStaff ||
+    qualifyingContainerCount >= 3 ||
+    params.entitlements.some(
+      (e) => e.entitlementType === 'SCHOOL_ACCESS' && e.status === 'ACTIVE'
+    )
+  );
+
+  return {
+    qualifyingContainerCount,
+    hasCommunityAccess,
+    hasSchoolAccess,
+  };
+}
+
 export function useCustomerEntitlements(): CustomerEntitlementState {
   const { user, profile, refreshProfile, isStaff } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
@@ -58,38 +101,13 @@ export function useCustomerEntitlements(): CustomerEntitlementState {
 
   const hasActivatedProduct = activations.length > 0;
 
-  // Qualification logic:
-  // Count distinct activated container identities (code values) belonging to user
-  const distinctContainerCodes = new Set<string>();
-  activations.forEach((a) => {
-    const codeVal = (a.code || '').trim().toUpperCase();
-    if (codeVal) {
-      distinctContainerCodes.add(codeVal);
-    }
-  });
-  const qualifyingContainerCount = Math.max(
-    distinctContainerCodes.size,
-    profile?.qualifyingContainerCount || 0
-  );
-  
-  // Authoritative entitlement check: Staff bypass OR authoritative ACTIVE entitlement document.
-  // Earned access: Once a user has legitimately unlocked School, treat School access as EARNED ACCESS.
-  // Do NOT automatically revoke School access merely because a product entitlement later becomes EXPIRED or INACTIVE.
-  const hasCommunityAccess = Boolean(
-    isStaff ||
-    entitlements.some(
-      (e) => e.entitlementType === 'COMMUNITY_ACCESS' && e.status === 'ACTIVE'
-    )
-  );
-
-  const hasSchoolAccess = Boolean(
-    isStaff ||
-    qualifyingContainerCount >= 3 ||
-    profile?.schoolAccess === true ||
-    entitlements.some(
-      (e) => e.entitlementType === 'SCHOOL_ACCESS' && e.status !== 'REVOKED'
-    )
-  );
+  const { qualifyingContainerCount, hasCommunityAccess, hasSchoolAccess } =
+    evaluateCustomerEntitlements({
+      activations,
+      entitlements,
+      isStaff,
+      profile,
+    });
 
   const latestActivation = activations.length > 0 ? activations[0] : null;
 

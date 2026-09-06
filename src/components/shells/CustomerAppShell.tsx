@@ -35,7 +35,7 @@ interface NavItem {
   badge?: string;
 }
 
-const CUSTOMER_NAV_ITEMS: NavItem[] = [
+export const CUSTOMER_NAV_ITEMS: NavItem[] = [
   {
     id: 'app',
     label: 'Dashboard',
@@ -308,7 +308,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
         {/* Dedicated Desktop Horizontal Navigation Bar */}
         <div className="hidden lg:block border-t border-gray-100 bg-[#FAFAFA]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1">
+            <nav className="flex items-center gap-1 xl:gap-1.5 flex-wrap xl:flex-nowrap py-1.5">
               {CUSTOMER_NAV_ITEMS.map((item) => {
                 const isActive = route === item.id;
                 const isGated =
@@ -321,7 +321,7 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
                     id={`customer-nav-desktop-${item.id.replace(/\//g, '-')}`}
                     onClick={() => handleNav(item.id)}
                     title={isGated ? getLocalizedLockHint(item) : getLocalizedLabel(item)}
-                    className={`px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0 border-b-2 ${
+                    className={`px-2.5 xl:px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-1.5 cursor-pointer shrink-0 border-b-2 ${
                       isActive
                         ? 'text-[#0B2346] border-[#0B2346] bg-white shadow-2xs font-black'
                         : 'text-gray-600 hover:text-[#0B2346] hover:bg-white border-transparent'

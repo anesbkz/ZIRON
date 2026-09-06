@@ -152,7 +152,7 @@ export const ProfilePage: React.FC = () => {
   if (!user || !profile) {
     return (
       <div className="py-24 text-center text-xs font-mono text-gray-500">
-        INITIALIZING PARTICIPANT PROFILE...
+        {t.initializingProfile}
       </div>
     );
   }
@@ -175,7 +175,7 @@ export const ProfilePage: React.FC = () => {
           <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-white border border-[#E2E8F0] shadow-xs">
             <User className="w-3.5 h-3.5 text-[#0B2346]" />
             <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#0B2346]">
-              SUBJECT DOSSIER
+              {t.subjectDossier}
             </span>
           </div>
         </div>
@@ -193,9 +193,9 @@ export const ProfilePage: React.FC = () => {
                   <h1 className="text-2xl font-black text-[#0B2346]">
                     {profile.firstName && profile.lastName
                       ? `${profile.firstName} ${profile.lastName}`
-                      : profile.displayName || 'Subject Participant'}
+                      : profile.displayName || t.defaultParticipantName}
                   </h1>
-                  <p className="text-xs font-mono text-gray-500">
+                  <p dir="ltr" className="text-xs font-mono text-gray-500 text-start">
                     {profile.email} • UID: {profile.uid.slice(0, 12)}...
                   </p>
                 </div>
@@ -208,11 +208,11 @@ export const ProfilePage: React.FC = () => {
                     key={r}
                     className="px-2 py-0.5 bg-[#0B2346]/10 text-[#0B2346] font-mono text-[10px] font-bold uppercase"
                   >
-                    ROLE: {r}
+                    {t.rolePrefix}: {r}
                   </span>
                 ))}
                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-mono text-[10px] font-bold uppercase">
-                  STATUS: {profile.status}
+                  {t.statusPrefix}: {profile.status}
                 </span>
               </div>
             </div>
@@ -262,7 +262,7 @@ export const ProfilePage: React.FC = () => {
         <div className="bg-white border border-[#E2E8F0] p-6 sm:p-8 shadow-sm">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-6">
             <h2 className="text-sm font-bold uppercase tracking-wider text-[#0B2346]">
-              {isEditing ? 'Edit Customer Dossier' : 'Customer Account Profile'}
+              {isEditing ? t.editDossierTitle : t.accountProfileTitle}
             </h2>
             {!isEditing ? (
               <Button
@@ -310,11 +310,11 @@ export const ProfilePage: React.FC = () => {
                   </div>
                   <div>
                     <span className="block text-[11px] text-gray-500 uppercase">{t.dateOfBirth}</span>
-                    <span className="text-xs font-mono font-bold text-[#0B2346]">
+                    <span dir="ltr" className="text-xs font-mono font-bold text-[#0B2346] block text-start">
                       {profile.dateOfBirth || '—'}
                     </span>
                     <span className="block text-[10px] text-emerald-700 mt-0.5">
-                      Confidential Subject Data
+                      {t.confidentialDataNotice}
                     </span>
                   </div>
                 </div>
@@ -331,7 +331,7 @@ export const ProfilePage: React.FC = () => {
                   <div className="space-y-1.5">
                     <span className="block text-[11px] text-gray-500 uppercase">{t.email}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-[#0B2346]">{profile.email}</span>
+                      <span dir="ltr" className="text-xs font-bold text-[#0B2346]">{profile.email}</span>
                       {user.emailVerified ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[10px] font-bold">
                           <CheckCircle2 className="w-3 h-3 text-emerald-600" />
@@ -358,7 +358,7 @@ export const ProfilePage: React.FC = () => {
                   <div className="space-y-1.5">
                     <span className="block text-[11px] text-gray-500 uppercase">{t.phone}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-bold text-[#0B2346]">
+                      <span dir="ltr" className="text-xs font-mono font-bold text-[#0B2346]">
                         {profile.phone || profile.phoneNumber || '—'}
                       </span>
                       {profile.phoneVerified ? (
@@ -389,7 +389,7 @@ export const ProfilePage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 bg-gray-50 border border-gray-100">
                   <div>
                     <span className="block text-[11px] text-gray-500 uppercase">{t.country}</span>
-                    <span className="text-xs font-bold text-[#0B2346]">{profile.country || 'Algeria'}</span>
+                    <span className="text-xs font-bold text-[#0B2346]">{profile.country || (locale === 'ar' ? 'الجزائر' : locale === 'fr' ? 'Algérie' : 'Algeria')}</span>
                   </div>
                   <div>
                     <span className="block text-[11px] text-gray-500 uppercase">{t.wilaya}</span>
@@ -401,7 +401,7 @@ export const ProfilePage: React.FC = () => {
                   </div>
                   <div>
                     <span className="block text-[11px] text-gray-500 uppercase">{t.address}</span>
-                    <span className="text-xs text-[#0B2346]">{profile.address || '— (Optional)'}</span>
+                    <span className="text-xs text-[#0B2346]">{profile.address || `— (${t.optional})`}</span>
                   </div>
                 </div>
               </div>
@@ -424,9 +424,9 @@ export const ProfilePage: React.FC = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="block text-[11px] text-gray-500 uppercase">Profile Photo URL</span>
-                    <span className="text-xs font-mono text-gray-600 truncate block">
-                      {profile.profilePhotoUrl || 'None configured'}
+                    <span className="block text-[11px] text-gray-500 uppercase">{t.profilePhotoUrlLabel}</span>
+                    <span dir="ltr" className="text-xs font-mono text-gray-600 truncate block text-start">
+                      {profile.profilePhotoUrl || t.noneConfigured}
                     </span>
                   </div>
                 </div>
@@ -441,21 +441,21 @@ export const ProfilePage: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-gray-50 border border-gray-100 text-xs">
                   <div>
                     <span className="block text-[11px] text-gray-500 uppercase">{t.accountCreated}</span>
-                    <span className="font-mono text-gray-700">
-                      {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : '—'}
+                    <span dir="ltr" className="font-mono text-gray-700 block text-start">
+                      {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString(locale === 'ar' ? 'ar-DZ' : locale === 'fr' ? 'fr-DZ' : 'en-US') : '—'}
                     </span>
                   </div>
                   <div>
                     <span className="block text-[11px] text-gray-500 uppercase">{t.lastUpdated}</span>
-                    <span className="font-mono text-gray-700">
-                      {profile.updatedAt ? new Date(profile.updatedAt).toLocaleString() : '—'}
+                    <span dir="ltr" className="font-mono text-gray-700 block text-start">
+                      {profile.updatedAt ? new Date(profile.updatedAt).toLocaleString(locale === 'ar' ? 'ar-DZ' : locale === 'fr' ? 'fr-DZ' : 'en-US') : '—'}
                     </span>
                   </div>
                   <div>
-                    <span className="block text-[11px] text-gray-500 uppercase">Legal Acceptance</span>
+                    <span className="block text-[11px] text-gray-500 uppercase">{t.legalAcceptanceTitle}</span>
                     <span className="inline-flex items-center gap-1 text-emerald-700 font-bold">
                       <CheckCircle2 className="w-3 h-3" />
-                      Terms & Privacy v1.0
+                      {t.termsAndPrivacyAccepted}
                     </span>
                   </div>
                 </div>
@@ -532,7 +532,7 @@ export const ProfilePage: React.FC = () => {
                     }}
                     placeholder={t.phonePlaceholder}
                     error={errors.phone}
-                    helperText={isAlg ? 'Format: 05/06/07 XX XX XX or +213' : 'Include country code'}
+                    helperText={isAlg ? t.phoneHelperAlgeria : t.phoneHelperInternational}
                   />
                 </div>
 
@@ -594,7 +594,7 @@ export const ProfilePage: React.FC = () => {
                       type="text"
                       value={wilaya}
                       onChange={(e) => setWilaya(e.target.value)}
-                      placeholder="State / Province / Region"
+                      placeholder={t.stateProvincePlaceholder}
                     />
                   )}
                 </div>
@@ -646,12 +646,12 @@ export const ProfilePage: React.FC = () => {
                 {/* Profile Photo URL */}
                 <div>
                   <Input
-                    label={`Profile Photo URL (${t.optional})`}
+                    label={`${t.profilePhotoUrlLabel} (${t.optional})`}
                     type="url"
                     value={profilePhotoUrl}
                     onChange={(e) => setProfilePhotoUrl(e.target.value)}
                     placeholder="https://example.com/avatar.jpg"
-                    helperText="Direct image URL for avatar display."
+                    helperText={t.profilePhotoUrlHelper}
                   />
                 </div>
               </div>

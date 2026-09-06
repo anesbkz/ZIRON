@@ -82,6 +82,24 @@ export interface ProfileTranslations {
   langArabic: string;
   langFrench: string;
   langEnglish: string;
+
+  // New Profile Dossier Specific Labels
+  subjectDossier: string;
+  defaultParticipantName: string;
+  rolePrefix: string;
+  statusPrefix: string;
+  editDossierTitle: string;
+  accountProfileTitle: string;
+  confidentialDataNotice: string;
+  profilePhotoUrlLabel: string;
+  profilePhotoUrlHelper: string;
+  noneConfigured: string;
+  legalAcceptanceTitle: string;
+  termsAndPrivacyAccepted: string;
+  initializingProfile: string;
+  phoneHelperAlgeria: string;
+  phoneHelperInternational: string;
+  stateProvincePlaceholder: string;
 }
 
 export const PROFILE_TRANSLATIONS: Record<Locale, ProfileTranslations> = {
@@ -157,6 +175,23 @@ export const PROFILE_TRANSLATIONS: Record<Locale, ProfileTranslations> = {
     langArabic: 'العربية (Arabic)',
     langFrench: 'Français (French)',
     langEnglish: 'English (English)',
+
+    subjectDossier: 'Subject Dossier',
+    defaultParticipantName: 'Subject Participant',
+    rolePrefix: 'Role',
+    statusPrefix: 'Status',
+    editDossierTitle: 'Edit Customer Dossier',
+    accountProfileTitle: 'Customer Account Profile',
+    confidentialDataNotice: 'Confidential Subject Data',
+    profilePhotoUrlLabel: 'Profile Photo URL',
+    profilePhotoUrlHelper: 'Direct image URL for avatar display.',
+    noneConfigured: 'None configured',
+    legalAcceptanceTitle: 'Legal Acceptance',
+    termsAndPrivacyAccepted: 'Terms & Privacy v1.0',
+    initializingProfile: 'Initializing Participant Profile...',
+    phoneHelperAlgeria: 'Format: 05/06/07 XX XX XX or +213',
+    phoneHelperInternational: 'Include country code',
+    stateProvincePlaceholder: 'State / Province / Region',
   },
 
   fr: {
@@ -231,6 +266,23 @@ export const PROFILE_TRANSLATIONS: Record<Locale, ProfileTranslations> = {
     langArabic: 'العربية (Arabe)',
     langFrench: 'Français (Français)',
     langEnglish: 'English (Anglais)',
+
+    subjectDossier: 'Dossier Sujet',
+    defaultParticipantName: 'Participant Sujet',
+    rolePrefix: 'Rôle',
+    statusPrefix: 'Statut',
+    editDossierTitle: 'Modifier le Dossier Client',
+    accountProfileTitle: 'Profil du Compte Client',
+    confidentialDataNotice: 'Données Confidentielles du Sujet',
+    profilePhotoUrlLabel: 'URL de la Photo de Profil',
+    profilePhotoUrlHelper: 'URL directe de l’image pour l’avatar.',
+    noneConfigured: 'Aucune configurée',
+    legalAcceptanceTitle: 'Acceptation Légale',
+    termsAndPrivacyAccepted: 'Conditions & Confidentialité v1.0',
+    initializingProfile: 'Initialisation du profil participant...',
+    phoneHelperAlgeria: 'Format: 05/06/07 XX XX XX ou +213',
+    phoneHelperInternational: 'Inclure l’indicatif du pays',
+    stateProvincePlaceholder: 'État / Province / Région',
   },
 
   ar: {
@@ -305,6 +357,23 @@ export const PROFILE_TRANSLATIONS: Record<Locale, ProfileTranslations> = {
     langArabic: 'العربية',
     langFrench: 'الفرنسية (Français)',
     langEnglish: 'الإنجليزية (English)',
+
+    subjectDossier: 'ملف المشترك المعتمد',
+    defaultParticipantName: 'مشارك معتمد',
+    rolePrefix: 'الدور',
+    statusPrefix: 'الحالة',
+    editDossierTitle: 'تعديل ملف العميل',
+    accountProfileTitle: 'ملف حساب المشترك',
+    confidentialDataNotice: 'بيانات سرية خاصة بالمشترك',
+    profilePhotoUrlLabel: 'رابط الصورة الشخصية',
+    profilePhotoUrlHelper: 'رابط مباشر للصورة لعرضها في الملف الشخصي.',
+    noneConfigured: 'لم يتم تعيين صورة',
+    legalAcceptanceTitle: 'الموافقة القانونية',
+    termsAndPrivacyAccepted: 'الشروط والخصوصية الإصدار 1.0',
+    initializingProfile: 'جارٍ تهيئة ملف المشترك...',
+    phoneHelperAlgeria: 'الصيغة: 05/06/07 XX XX XX أو 213+',
+    phoneHelperInternational: 'يرجى تضمين رمز الدولة',
+    stateProvincePlaceholder: 'الولاية / المقاطعة / المنطقة',
   },
 };
 
