@@ -54,18 +54,7 @@ export const SchoolPage: React.FC = () => {
     load();
   }, []);
 
-  const schoolContent = content.school || {
-    heroBadge: 'CONTINUOUS MASTERY & CURRICULA',
-    heroTitle: 'The ZIRON School of Biopharma & Applied Mastery',
-    heroSubtitle:
-      'A dynamic educational ecosystem bridging human biology, metabolic optimization, precision agriculture, digital literacy, and high-impact enterprise execution.',
-    enterPortalBtn: 'Enter School Portal',
-    enrollBtn: 'Enroll to Unlock Curricula',
-    verifyCodeBtn: 'Verify Container Code',
-    tracksAvailable: 'Curriculum Tracks Available',
-    trackNumber: 'Track',
-    qualificationNotice: 'Restart School requires 3 activated product containers.',
-  };
+  const schoolContent = content.school;
 
   return (
     <div className="py-12 bg-[#F5F7FA]">

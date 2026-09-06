@@ -82,3 +82,76 @@ export function formatDzdPrice(priceDzd: number | null, locale: Locale = 'en'): 
   const formatted = new Intl.NumberFormat(locale === 'ar' ? 'ar-DZ' : 'fr-DZ').format(priceDzd);
   return locale === 'ar' ? `${formatted} د.ج` : `${formatted} DZD`;
 }
+
+/**
+ * Returns catalog items localized for the active locale.
+ */
+export function getLocalizedCatalog(locale: Locale = 'en'): PublicCatalogItem[] {
+  if (locale === 'ar') {
+    return [
+      {
+        ...ZIRON_CATALOG[0],
+        name: 'ZIRON المرحلة 01',
+        description: 'عبوة التركيبة التغذوية للمرحلة 01 صُممت لروتين أول 30 يومًا من البرنامج لتأسيس الانضباط الصباحي.',
+        badgeText: 'المرحلة 01 — مرحلة البرنامج',
+        colorName: 'قرمزي',
+      },
+      {
+        ...ZIRON_CATALOG[1],
+        name: 'ZIRON المرحلة 02',
+        description: 'عبوة التركيبة التغذوية للمرحلة 02 صُممت للأيام من 31 إلى 60 لتعزيز الاستمرارية وترسيخ العادات.',
+        badgeText: 'المرحلة 02 — مرحلة البرنامج',
+        colorName: 'كهرماني',
+      },
+      {
+        ...ZIRON_CATALOG[2],
+        name: 'ZIRON المرحلة 03',
+        description: 'عبوة التركيبة التغذوية للمرحلة 03 صُممت للأيام من 61 إلى 90 لتثبيت استقلالية العادات الصحية على المدى الطويل.',
+        badgeText: 'المرحلة 03 — مرحلة البرنامج',
+        colorName: 'زمردي',
+      },
+      {
+        ...ZIRON_CATALOG[3],
+        name: 'حزمة برنامج ZIRON الكاملة لـ 90 يومًا',
+        description: 'طقم بروتوكول متكامل يضم العبوات الثلاث (المرحلة 01، المرحلة 02، والمرحلة 03) بإجمالي 90 كبسولة لرحلة الـ 90 يومًا كاملة.',
+        badgeText: 'حزمة بروتوكول الـ 90 يومًا الكاملة',
+        colorName: 'أزرق ملكي ثلاثي المراحل',
+      },
+    ];
+  }
+
+  if (locale === 'fr') {
+    return [
+      {
+        ...ZIRON_CATALOG[0],
+        name: 'ZIRON Phase 01',
+        description: 'Flacon de formulation nutritionnelle Phase 01 conçu pour la période initiale de 30 jours du programme.',
+        badgeText: 'PHASE 01 — PROGRAMME',
+        colorName: 'POURPRE',
+      },
+      {
+        ...ZIRON_CATALOG[1],
+        name: 'ZIRON Phase 02',
+        description: 'Flacon de formulation nutritionnelle Phase 02 conçu pour la période intermédiaire de 30 jours (jours 31 à 60).',
+        badgeText: 'PHASE 02 — PROGRAMME',
+        colorName: 'AMBRE',
+      },
+      {
+        ...ZIRON_CATALOG[2],
+        name: 'ZIRON Phase 03',
+        description: 'Flacon de formulation nutritionnelle Phase 03 conçu pour la phase finale de 30 jours (jours 61 à 90).',
+        badgeText: 'PHASE 03 — PROGRAMME',
+        colorName: 'ÉMERAUDE',
+      },
+      {
+        ...ZIRON_CATALOG[3],
+        name: 'Pack Complet 90 Jours ZIRON',
+        description: 'Kit complet articulé en 3 phases comprenant les 3 flacons de 30 gélules (Phase 01, Phase 02 et Phase 03) totalisant 90 gélules.',
+        badgeText: 'PACK COMPLET PROTOCOLE 90 JOURS',
+        colorName: 'BLEU MARINE TRI-PHASE',
+      },
+    ];
+  }
+
+  return ZIRON_CATALOG;
+}

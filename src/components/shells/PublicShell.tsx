@@ -16,6 +16,8 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
     { label: content.nav.program, route: 'program' },
     { label: content.nav.science, route: 'science' },
     { label: content.nav.quality, route: 'quality' },
+    { label: content.nav.community, route: 'community' },
+    { label: content.nav.school, route: 'school' },
     { label: content.nav.restart, route: 'restart' },
     { label: content.nav.faq, route: 'faq' },
   ];
@@ -25,6 +27,8 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
     { label: content.nav.program, route: 'program' },
     { label: content.nav.science, route: 'science' },
     { label: content.nav.quality, route: 'quality' },
+    { label: content.nav.community, route: 'community' },
+    { label: content.nav.school, route: 'school' },
     { label: content.nav.restart, route: 'restart' },
     { label: content.nav.faq, route: 'faq' },
     { label: content.nav.shop, route: 'shop' },
@@ -88,7 +92,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 <button
                   key={item.route}
                   onClick={() => handleNavClick(item.route)}
-                  className={`px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer ${
+                  className={`px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap ${
                     isActive
                       ? 'text-[#0B2346] border-b-2 border-[#0B2346]'
                       : 'text-gray-600 hover:text-[#0B2346]'
@@ -140,7 +144,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                     className="px-2.5 py-1.5 bg-[#0B2346] text-white text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 hover:bg-[#07162c] cursor-pointer"
                   >
                     <ShieldAlert className="w-3 h-3 text-emerald-400" />
-                    <span>Command Center</span>
+                    <span>{content.nav.commandCenter || 'Command Center'}</span>
                   </button>
                 )}
                 <button
@@ -156,7 +160,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                   className="px-2 py-1.5 bg-gray-50 hover:bg-gray-100 border border-[#E2E8F0] text-[10px] font-mono font-bold text-[#0B2346] uppercase flex items-center gap-1 cursor-pointer"
                   title="Profile Dossier"
                 >
-                  <span>Dossier</span>
+                  <span>{content.nav.dossier || 'Dossier'}</span>
                 </button>
                 <button
                   onClick={logout}
@@ -171,7 +175,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 onClick={() => handleNavClick('login')}
                 className="hidden lg:inline-flex items-center gap-1 px-3 py-1.5 border border-[#0B2346] text-[#0B2346] text-[11px] font-bold uppercase tracking-wider hover:bg-[#0B2346] hover:text-white transition-colors cursor-pointer"
               >
-                <span>Sign In</span>
+                <span>{content.nav.login}</span>
               </button>
             )}
 
@@ -196,7 +200,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-[#0B2346] hover:bg-gray-50 text-start cursor-pointer"
               >
                 <span>{item.label}</span>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-400" />
+                <ChevronRight className="w-3.5 h-3.5 text-gray-400 rtl:rotate-180" />
               </button>
             ))}
             <div className="pt-3 border-t border-gray-100 flex flex-col gap-2">
@@ -244,7 +248,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
             {/* Col 2: Navigation */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-white/90 mb-3">
-                Protocol & Products
+                {content.nav.protocolAndProducts || 'Protocol & Products'}
               </h4>
               <ul className="space-y-2 text-xs text-white/70">
                 <li>
@@ -255,6 +259,16 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                 <li>
                   <button onClick={() => handleNavClick('program')} className="hover:text-white transition-colors cursor-pointer">
                     {content.nav.program}
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => handleNavClick('community')} className="hover:text-white transition-colors cursor-pointer">
+                    {content.nav.community}
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => handleNavClick('school')} className="hover:text-white transition-colors cursor-pointer">
+                    {content.nav.school}
                   </button>
                 </li>
                 <li>
@@ -273,7 +287,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
             {/* Col 3: Quality & Standards */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-white/90 mb-3">
-                Standards & Verification
+                {content.nav.standardsAndVerification || 'Standards & Verification'}
               </h4>
               <ul className="space-y-2 text-xs text-white/70">
                 <li>
@@ -302,7 +316,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
             {/* Col 4: Corporate Notice */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-white/90 mb-3">
-                Corporate Governance
+                {content.nav.corporateGovernance || 'Corporate Governance'}
               </h4>
               <p className="text-[11px] text-white/60 leading-relaxed">
                 {content.brand.manufacturingNotice}
@@ -312,7 +326,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
                   onClick={() => handleNavClick('about')}
                   className="text-xs font-semibold text-white/80 hover:text-white underline cursor-pointer"
                 >
-                  {content.nav.about} →
+                  {content.nav.about} {dir === 'rtl' ? '←' : '→'}
                 </button>
               </div>
             </div>
@@ -320,7 +334,9 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
 
           {/* Mandatory Health Disclaimer Box */}
           <div className="bg-black/20 p-4 border border-white/5 text-[11px] text-white/65 leading-relaxed mb-6">
-            <p className="font-semibold text-white/80 mb-1">MANDATORY REGULATORY DISCLOSURE</p>
+            <p className="font-semibold text-white/80 mb-1">
+              {content.nav.mandatoryDisclosure || 'MANDATORY REGULATORY DISCLOSURE'}
+            </p>
             <p>{content.footer.mandatoryHealthNotice}</p>
           </div>
 
@@ -330,9 +346,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
               © {new Date().getFullYear()} {content.footer.copyrightNotice}
             </div>
             <div className="flex items-center gap-4 text-[10px] tracking-wider uppercase">
-              <span>ALGERIA TARGET MARKET (DZD)</span>
-              <span>•</span>
-              <span>VERIFIED BATCH COMPLIANCE</span>
+              <span>{content.nav.algeriaMarketTag || 'ALGERIA TARGET MARKET (DZD) • VERIFIED BATCH COMPLIANCE'}</span>
             </div>
           </div>
         </div>

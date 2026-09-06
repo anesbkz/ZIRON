@@ -25,6 +25,8 @@ export interface SiteContent {
     program: string;
     science: string;
     quality: string;
+    community: string;
+    school: string;
     verify: string;
     shop: string;
     about: string;
@@ -35,6 +37,14 @@ export interface SiteContent {
     verifyProduct: string;
     menu: string;
     close: string;
+    commandCenter?: string;
+    dossier?: string;
+    protocolAndProducts?: string;
+    standardsAndVerification?: string;
+    corporateGovernance?: string;
+    mandatoryDisclosure?: string;
+    rightsReserved?: string;
+    algeriaMarketTag?: string;
   };
   home: {
     heroTag: string;

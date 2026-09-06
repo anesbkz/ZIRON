@@ -3,7 +3,7 @@ import { useI18n } from '@/context/I18nContext';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
-import { getAppTranslations } from '@/lib/i18n/appTranslations';
+import { getSiteContent } from '@/lib/content/site-content';
 import {
   MessageSquare,
   ShieldCheck,
@@ -14,28 +14,10 @@ import {
 } from 'lucide-react';
 
 export const CommunityPage: React.FC = () => {
-  const { locale, content, dir, navigate } = useI18n();
+  const { locale, dir, navigate } = useI18n();
   const { user } = useAuth();
-  const t = getAppTranslations(locale);
-
-  const comm = content.community || {
-    heroBadge: 'SUBJECT COLLABORATION NETWORK',
-    heroTitle: 'The ZIRON Verified Community',
-    heroSubtitle:
-      'A private, moderated forum connecting participants traversing the 90-day biological trajectory.',
-    enterCommunityBtn: 'Enter Community',
-    enrollBtn: 'Enroll for Access',
-    verifyCodeBtn: 'Verify Container Code',
-    shieldTitle: 'Verified Physical Ownership',
-    shieldDesc:
-      'Entry requires serial verification from a genuine ZIRON 30-capsule phase container, ensuring discussions remain evidence-based and authentic.',
-    cohortTitle: 'Phase-Cohort Synchrony',
-    cohortDesc:
-      'Connect with subjects currently in Phase 01, Phase 02, or Phase 03 to compare trajectories.',
-    moderationTitle: 'Scientific Oversight',
-    moderationDesc:
-      'Dedicated bio-scientific moderators ensure peer interactions remain constructive, safe, and aligned with evidence standards.',
-  };
+  const siteContent = getSiteContent(locale);
+  const comm = siteContent.community;
 
   return (
     <div className="py-12 bg-[#F5F7FA]">
@@ -143,3 +125,4 @@ export const CommunityPage: React.FC = () => {
     </div>
   );
 };
+
