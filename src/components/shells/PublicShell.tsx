@@ -16,12 +16,19 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
     { label: content.nav.program, route: 'program' },
     { label: content.nav.science, route: 'science' },
     { label: content.nav.quality, route: 'quality' },
-    { label: 'Community', route: 'community' },
-    { label: 'School', route: 'school' },
-    { label: content.nav.verify, route: 'verify' },
+    { label: content.nav.restart, route: 'restart' },
+    { label: content.nav.faq, route: 'faq' },
+  ];
+
+  const drawerLinks: { label: string; route: PublicRoute }[] = [
+    { label: content.nav.product, route: 'ziron' },
+    { label: content.nav.program, route: 'program' },
+    { label: content.nav.science, route: 'science' },
+    { label: content.nav.quality, route: 'quality' },
+    { label: content.nav.restart, route: 'restart' },
+    { label: content.nav.faq, route: 'faq' },
     { label: content.nav.shop, route: 'shop' },
     { label: content.nav.about, route: 'about' },
-    { label: content.nav.faq, route: 'faq' },
   ];
 
   const handleNavClick = (targetRoute: PublicRoute) => {
@@ -182,7 +189,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
           <div className="xl:hidden bg-white border-b border-[#E2E8F0] px-4 py-4 space-y-1">
-            {navLinks.map((item) => (
+            {drawerLinks.map((item) => (
               <button
                 key={item.route}
                 onClick={() => handleNavClick(item.route)}

@@ -595,9 +595,9 @@ export const HomePage: React.FC = () => {
               <div className="w-10 h-10 bg-[#0B2346] text-white flex items-center justify-center mb-3">
                 <FileCheck2 className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-[#0B2346]">Rigorous Quality Standards</h3>
+              <h3 className="text-base font-bold text-[#0B2346]">Controlled Quality Standards</h3>
               <p className="text-xs text-gray-600 leading-relaxed">
-                Manufacturing follows controlled cGMP cleanroom conditions. Raw material screening includes analytical assay testing for identity, purity, and stability.
+                Manufacturing adheres to documented quality control standards, raw material screening protocols, and batch traceability. Quality documentation will be published as production milestones are registered.
               </p>
               <div className="pt-2">
                 <button
