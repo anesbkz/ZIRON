@@ -40,11 +40,17 @@ jobs:
       - name: Install dependencies via lockfile
         run: bun install --frozen-lockfile
 
+      - name: Install Functions dependencies
+        run: npm --prefix functions ci
+
       - name: Install Firebase CLI globally
         run: npm install -g firebase-tools
 
       - name: Run Typecheck and Linter
         run: npm run lint
+
+      - name: Run Functions Typecheck and Build
+        run: npm --prefix functions run build
 
       - name: Run Unit Tests (Security, RBAC, Navigation)
         run: npm run test
@@ -62,6 +68,16 @@ jobs:
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_BUILD_TIME: ${{ env.VITE_BUILD_TIME }}
+
+      - name: Deploy Firestore Rules, Indexes, and Cloud Functions
+        env:
+          SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT }}
+        run: |
+          echo "$SERVICE_ACCOUNT_KEY" > /tmp/firebase-sa.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json
+          firebase deploy --only firestore,functions --project micro-opus-sghtt --force
+          rm -f /tmp/firebase-sa.json
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT != '' }}
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0

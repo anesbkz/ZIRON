@@ -1,14 +1,21 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.activateContainerCode = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = void 0;
+exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.activateContainerCode = exports.verifyContainerCode = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = exports.FIRESTORE_DATABASE_ID = void 0;
 exports.getBootstrapSuperAdminEmail = getBootstrapSuperAdminEmail;
 exports.isBootstrapModeAuthorized = isBootstrapModeAuthorized;
 exports.checkIsSuperAdmin = checkIsSuperAdmin;
 exports.writeAuthoritativeAuditLog = writeAuthoritativeAuditLog;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const firestore_1 = require("firebase-admin/firestore");
 admin.initializeApp();
-const db = admin.firestore();
+/**
+ * Authoritative Named Firestore Database
+ * Connects to the designated named Firestore database for the VIREXON / ZIRON platform.
+ */
+exports.FIRESTORE_DATABASE_ID = process.env.FIRESTORE_DATABASE_ID ||
+    'ai-studio-zironvirexonbios-f7d3e78d-aa70-4ff3-ae14-d8f7ce2b420b';
+const db = (0, firestore_1.getFirestore)(exports.FIRESTORE_DATABASE_ID);
 // Server-authoritative bootstrap identity configuration.
 // Sourced securely from environment variables or Firebase Functions runtime config.
 // Never hard-coded. Never exposed to client-side code.
@@ -241,6 +248,49 @@ exports.assignUserRoles = functions.https.onCall(async (data, context) => {
     return { success: true, targetUid, newRoles };
 });
 /**
+ * Callable Function: Authoritative Product Container Verification
+ *
+ * Public/authenticated endpoint allowing verification of product code validity
+ * and authenticity without exposing the protected productCodes collection.
+ * Returns non-sensitive public validation status, phase, batch, and sku.
+ */
+exports.verifyContainerCode = functions.https.onCall(async (data) => {
+    const rawCode = (data?.code || '').trim().toUpperCase();
+    if (!rawCode) {
+        throw new functions.https.HttpsError('invalid-argument', 'Product verification code is required.');
+    }
+    // Pre-locate product code document reference
+    const codeDocRef = db.collection('productCodes').doc(rawCode);
+    let codeSnap = await codeDocRef.get();
+    if (!codeSnap.exists) {
+        const codeQuery = await db
+            .collection('productCodes')
+            .where('code', '==', rawCode)
+            .limit(1)
+            .get();
+        if (codeQuery.empty) {
+            return {
+                isValid: false,
+                isAuthentic: false,
+                message: `Product container code "${rawCode}" not found in serialization catalog.`,
+            };
+        }
+        codeSnap = codeQuery.docs[0];
+    }
+    const codeData = codeSnap.data();
+    const now = new Date().toISOString();
+    return {
+        isValid: true,
+        isAuthentic: true,
+        isActivated: !!codeData.isActivated,
+        phase: codeData.phase || null,
+        batchNumber: codeData.batchNumber || codeData.batchId || null,
+        productSku: codeData.productSku || 'ZIRON Bio-Formulation',
+        verificationId: Math.random().toString(36).substring(2, 10).toUpperCase(),
+        verifiedAt: now,
+    };
+});
+/**
  * Callable Function: Authoritative Product Code Activation & Entitlement Granting
  * CONCURRENCY-SAFE ATOMIC TRANSACTION:
  * 1. Locates product code inside transaction
@@ -248,7 +298,7 @@ exports.assignUserRoles = functions.https.onCall(async (data, context) => {
  * 3. Marks code activated
  * 4. Creates activation record
  * 5. Creates authoritative entitlements
- * 6. Updates user cache flags
+ * 6. Updates user cache flags, XP (+50 XP), and level
  * 7. Writes authoritative activation audit log
  */
 exports.activateContainerCode = functions.https.onCall(async (data, context) => {
@@ -309,6 +359,14 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
         const schoolEntSnap = await transaction.get(schoolEntDocRef);
         const hasEarnedSchoolAccess = schoolEntSnap.exists && schoolEntSnap.data()?.status === 'ACTIVE';
         const qualifiesForSchool = qualifyingContainerCount >= 3 || hasEarnedSchoolAccess;
+        // Read current user document inside transaction for atomic XP and reward calculation
+        const userDocRef = db.collection('users').doc(callerUid);
+        const userSnap = await transaction.get(userDocRef);
+        const userData = userSnap.exists ? userSnap.data() : null;
+        const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+        const awardedXp = 50;
+        const totalXp = currentXp + awardedXp;
+        const level = Math.floor(totalXp / 100) + 1;
         const now = new Date().toISOString();
         const productSku = codeData.productSku || 'VIR-CONTAINER-DEFAULT';
         // 1. Mark code as activated (permanently bound to callerUid)
@@ -368,12 +426,13 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
                 qualifyingContainerCount,
             }, { merge: true });
         }
-        // 6. Update user profile quick access flags (CACHE/UI ONLY hints)
-        const userDocRef = db.collection('users').doc(callerUid);
+        // 6. Update user profile quick access flags and reward/XP state
         transaction.set(userDocRef, {
             communityAccess: true,
             schoolAccess: qualifiesForSchool,
             qualifyingContainerCount,
+            xp: totalXp,
+            level,
             updatedAt: now,
         }, { merge: true });
         // 7. Authoritative activation audit log
@@ -393,6 +452,9 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
                 activationId: activationDocRef.id,
                 qualifyingContainerCount,
                 schoolUnlocked: qualifiesForSchool,
+                xpAwarded: awardedXp,
+                totalXp,
+                level,
                 enforcedBy: 'SERVER_TRANSACTION',
             },
         });
@@ -402,6 +464,9 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
             entitlements: entitlementsToGrant,
             qualifyingContainerCount,
             schoolUnlocked: qualifiesForSchool,
+            xpAwarded: awardedXp,
+            totalXp,
+            level,
         };
     });
 });
