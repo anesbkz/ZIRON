@@ -12,8 +12,10 @@ concurrency:
 
 jobs:
   pipeline:
-    name: Validate and Deploy to Firebase Hosting
+    name: Validate and Deploy to Firebase
     runs-on: ubuntu-latest
+    env:
+      FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT }}
 
     steps:
       - name: Checkout repository
@@ -69,24 +71,27 @@ jobs:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_BUILD_TIME: ${{ env.VITE_BUILD_TIME }}
 
-      - name: Deploy Firestore Rules, Indexes, and Cloud Functions
-        env:
-          SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT }}
+      - name: Validate Deployment Credentials
         run: |
-          echo "$SERVICE_ACCOUNT_KEY" > /tmp/firebase-sa.json
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT" ]; then
+            echo "::error::Required secret FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT is missing or empty. Please configure this secret in repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Deploy Firestore Rules, Indexes, and Cloud Functions
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT" > /tmp/firebase-sa.json
           export GOOGLE_APPLICATION_CREDENTIALS=/tmp/firebase-sa.json
           firebase deploy --only firestore,functions --project micro-opus-sghtt --force
           rm -f /tmp/firebase-sa.json
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT != '' }}
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT }}'
+          firebaseServiceAccount: '${{ env.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT }}'
           channelId: live
           projectId: micro-opus-sghtt
-        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MICRO_OPUS_SGHTT != '' }}
 
       - name: Verify Live Deployment Target
         run: |
