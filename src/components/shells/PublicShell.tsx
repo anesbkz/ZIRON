@@ -86,14 +86,14 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
 
           {/* Desktop Navigation */}
-          <nav className="hidden xl:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1">
             {navLinks.map((item) => {
               const isActive = route === item.route;
               return (
                 <button
                   key={item.route}
                   onClick={() => handleNavClick(item.route)}
-                  className={`px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap ${
+                  className={`px-1.5 xl:px-2.5 py-1.5 text-[10px] xl:text-[11px] font-semibold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap ${
                     isActive
                       ? 'text-[#0B2346] border-b-2 border-[#0B2346]'
                       : 'text-gray-600 hover:text-[#0B2346]'
@@ -183,7 +183,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
             {/* Mobile Menu Hamburger */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="xl:hidden p-2 text-[#0B2346] hover:bg-gray-100 border border-[#E2E8F0] cursor-pointer"
+              className="lg:hidden p-2 text-[#0B2346] hover:bg-gray-100 border border-[#E2E8F0] cursor-pointer"
               aria-label={content.nav.menu}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -193,7 +193,7 @@ export const PublicShell: React.FC<{ children: React.ReactNode }> = ({ children 
 
         {/* Mobile Navigation Drawer */}
         {mobileMenuOpen && (
-          <div className="xl:hidden bg-white border-b border-[#E2E8F0] px-4 py-4 space-y-1">
+          <div className="lg:hidden bg-white border-b border-[#E2E8F0] px-4 py-4 space-y-1">
             {drawerLinks.map((item) => (
               <button
                 key={item.route}
