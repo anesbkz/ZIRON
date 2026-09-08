@@ -166,6 +166,31 @@ export interface SchoolCertificate {
   verificationHash: string;
 }
 
+export interface EnrollmentRecord {
+  id: string; // `${userId}_${courseId}`
+  userId: string;
+  courseId: string;
+  enrolledAt: string;
+  status: 'ACTIVE' | 'COMPLETED';
+  lastAccessedLessonId?: string;
+  lastAccessedAt?: string;
+  completedAt?: string | null;
+}
+
+export interface SchoolProgress {
+  id: string; // `${userId}_${courseId}`
+  userId: string;
+  courseId: string;
+  completedLessonIds: string[];
+  completedCount: number;
+  totalLessonsCount: number;
+  progressPercent: number; // 0 to 100
+  isCompleted: boolean;
+  completedAt: string | null; // Deterministic ISO string
+  lastAccessedLessonId?: string;
+  lastUpdated: string;
+}
+
 /* ==========================================================================
    COMMUNITY MODELS
    ========================================================================== */

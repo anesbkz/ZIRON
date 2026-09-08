@@ -243,6 +243,73 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "postId", "userId", "createdAt"]
+    },
+    "SchoolModule": {
+      "title": "SchoolModule",
+      "description": "Curriculum module grouping sequential lessons within a course",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "title": { "type": "object" },
+        "description": { "type": "object" },
+        "displayOrder": { "type": "number" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["courseId", "title", "displayOrder", "isPublished"]
+    },
+    "SchoolLesson": {
+      "title": "SchoolLesson",
+      "description": "Educational lesson containing markdown content and instructional metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "courseId": { "type": "string" },
+        "moduleId": { "type": "string" },
+        "title": { "type": "object" },
+        "contentMarkdown": { "type": "object" },
+        "durationMinutes": { "type": "number" },
+        "displayOrder": { "type": "number" },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["courseId", "moduleId", "title", "contentMarkdown", "durationMinutes", "displayOrder", "isPublished"]
+    },
+    "SchoolProgress": {
+      "title": "SchoolProgress",
+      "description": "Authoritative student lesson completion and deterministic course progress record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "completedLessonIds": { "type": "array" },
+        "completedCount": { "type": "number" },
+        "totalLessonsCount": { "type": "number" },
+        "progressPercent": { "type": "number" },
+        "isCompleted": { "type": "boolean" },
+        "completedAt": { "type": "string" },
+        "lastAccessedLessonId": { "type": "string" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["userId", "courseId", "completedLessonIds", "completedCount", "totalLessonsCount", "progressPercent", "isCompleted", "lastUpdated"]
+    },
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "Student course enrollment and access record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "courseId": { "type": "string" },
+        "enrolledAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "COMPLETED"] },
+        "lastAccessedLessonId": { "type": "string" },
+        "lastAccessedAt": { "type": "string" },
+        "completedAt": { "type": "string" }
+      },
+      "required": ["userId", "courseId", "enrolledAt", "status"]
     }
   },
   "firestore": {
@@ -285,6 +352,22 @@
     "/schoolCourses/{courseId}": {
       "schema": { "$ref": "#/entities/SchoolCourse" },
       "description": "Structured curriculum courses"
+    },
+    "/schoolModules/{moduleId}": {
+      "schema": { "$ref": "#/entities/SchoolModule" },
+      "description": "Curriculum course modules"
+    },
+    "/schoolLessons/{lessonId}": {
+      "schema": { "$ref": "#/entities/SchoolLesson" },
+      "description": "Instructional lessons within course modules"
+    },
+    "/schoolProgress/{progressId}": {
+      "schema": { "$ref": "#/entities/SchoolProgress" },
+      "description": "Student lesson completion and deterministic course progress"
+    },
+    "/enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/Enrollment" },
+      "description": "Student course enrollment and access registry"
     },
     "/communityPosts/{postId}": {
       "schema": { "$ref": "#/entities/CommunityPost" },

@@ -286,10 +286,11 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // SCHOOL CATEGORIES & COURSES (Curricula CMS)
-    // Direct client writes are forbidden. Curricula management is strictly server-authoritative
-    // via createSchoolCategory, updateSchoolCategory, deleteSchoolCategory,
-    // createSchoolCourse, updateSchoolCourse, deleteSchoolCourse Cloud Functions.
+    // SCHOOL CATEGORIES, COURSES, MODULES, LESSONS, ENROLLMENTS & PROGRESS
+    // Direct client writes to curriculum catalog are forbidden. Curricula management is strictly
+    // server-authoritative via Cloud Functions.
+    // Modules and lesson content are protected by authoritative School entitlement.
+    // Student progress records are protected against direct client manipulation.
     // =========================================================================
     match /schoolCategories/{categoryId} {
       allow get, list: if (existing().isPublished == true) || isStaff();
@@ -298,6 +299,32 @@ service cloud.firestore {
 
     match /schoolCourses/{courseId} {
       allow get, list: if (existing().isPublished == true) || isStaff();
+      allow create, update, delete: if false;
+    }
+
+    match /schoolModules/{moduleId} {
+      allow get, list: if ((existing().isPublished == true) && (hasSchoolEntitlement() || isStaff())) || isStaff();
+      allow create, update, delete: if false;
+    }
+
+    match /schoolLessons/{lessonId} {
+      allow get, list: if ((existing().isPublished == true) && (hasSchoolEntitlement() || isStaff())) || isStaff();
+      allow create, update, delete: if false;
+    }
+
+    match /enrollments/{enrollmentId} {
+      allow get: if isOwner(existing().userId) || isStaff();
+      allow list: if isStaff() || (isSignedIn() && existing().userId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && (hasSchoolEntitlement() || isStaff());
+      allow update: if isSignedIn() && isOwner(existing().userId) && incoming().userId == existing().userId;
+      allow delete: if isStaff();
+    }
+
+    match /schoolProgress/{progressId} {
+      allow get: if isOwner(existing().userId) || isStaff();
+      allow list: if isStaff() || (isSignedIn() && existing().userId == request.auth.uid);
+      // Direct client writes are forbidden: Authoritative progress and deterministic completion
+      // must be calculated and validated server-side via completeSchoolLesson Cloud Function.
       allow create, update, delete: if false;
     }
 

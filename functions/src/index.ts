@@ -430,11 +430,12 @@ async function assertCanManageCodes(
 export const verifyContainerCode = functions.https.onCall(async (data) => {
   const rawCode = (data?.code || '').trim().toUpperCase();
 
-  if (!rawCode) {
-    throw new functions.https.HttpsError(
-      'invalid-argument',
-      'Product verification code is required.'
-    );
+  if (!rawCode || rawCode.length < 5 || rawCode.length > 64 || !/^[A-Z0-9-]+$/.test(rawCode)) {
+    return {
+      isValid: false,
+      isAuthentic: false,
+      message: 'Invalid or malformed product verification code format.',
+    };
   }
 
   // Pre-locate product code document reference (supports direct docId, code field, or normalized code)

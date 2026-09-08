@@ -8,7 +8,6 @@ import {
   verifyContainerCode,
   VerificationResult,
 } from '@/services/productCodeService';
-import { isValidProductCodeFormat } from '@/lib/codes/productCodeGenerator';
 import {
   Shield,
   QrCode,
@@ -62,36 +61,26 @@ export const VerifyPage: React.FC = () => {
       const res = await verifyContainerCode(clean);
       setVerifyResult(res);
     } catch (err: unknown) {
-      // Fallback in case Cloud Functions are unreachable or running locally without backend
-      const isFormatValid = isValidProductCodeFormat(clean) || clean.startsWith('ZR-');
-      if (isFormatValid) {
-        setVerifyResult({
-          isValid: true,
-          isAuthentic: true,
-          isActivated: false,
-          status: 'UNUSED',
-          productSku: clean.startsWith('ZR-PH01')
-            ? 'ZR-PH01-30C'
-            : clean.startsWith('ZR-PH02')
-            ? 'ZR-PH02-30C'
-            : clean.startsWith('ZR-PH03')
-            ? 'ZR-PH03-30C'
-            : 'ZIRON Bio-Formulation',
-          phase: clean.startsWith('ZR-PH01') ? 1 : clean.startsWith('ZR-PH02') ? 2 : clean.startsWith('ZR-PH03') ? 3 : null,
-          verificationId: Math.random().toString(36).substring(2, 10).toUpperCase(),
-          verifiedAt: new Date().toISOString(),
-        });
-      } else {
-        setVerifyResult({
-          isValid: false,
-          isAuthentic: false,
-          message: locale === 'ar'
-            ? 'رمز الحاوية غير صالح أو غير موجود في سجل التشفير المعتمد.'
+      // Authoritative verification rule: If Cloud Functions are unavailable or fail,
+      // a product code MUST NEVER be considered authentic merely because it matches a prefix or pattern.
+      // Return a neutral verification-unavailable error.
+      setVerifyResult({
+        isValid: false,
+        isAuthentic: false,
+        message:
+          locale === 'ar'
+            ? 'خدمة التحقق من الأصالة غير متاحة حالياً. يُرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.'
             : locale === 'fr'
-            ? 'Code de flacon non valide ou introuvable dans le registre officiel.'
-            : 'Container code invalid or not found in official serialization catalog.',
-        });
-      }
+            ? 'Le service de vérification officiel est temporairement indisponible. Veuillez vérifier votre connexion et réessayer.'
+            : 'Authoritative verification service is temporarily unavailable. Please check your connection and try again.',
+      });
+      setErrorMessage(
+        locale === 'ar'
+          ? 'تعذر الوصول إلى سجل التشفير المعتمد حالياً.'
+          : locale === 'fr'
+          ? 'Impossible de joindre le registre officiel de sérialisation.'
+          : 'Unable to reach the authoritative product serialization registry.'
+      );
     } finally {
       setIsLoading(false);
     }
