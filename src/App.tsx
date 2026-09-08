@@ -41,6 +41,8 @@ import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
 import { AdminRolesPage } from '@/pages/admin/AdminRolesPage';
 import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
 import { AdminCmsPage } from '@/pages/admin/AdminCmsPage';
+import { AdminProductsPage } from '@/pages/admin/AdminProductsPage';
+import { AdminCodesPage } from '@/pages/admin/AdminCodesPage';
 import { AdminPlaceholderPage } from '@/pages/admin/AdminPlaceholderPage';
 import { AdminRouteGuard } from '@/components/guards/AdminRouteGuard';
 
@@ -96,26 +98,14 @@ function RouterOutlet() {
       case 'admin/products':
         adminContent = (
           <AdminRouteGuard requiredPermission="MANAGE_PRODUCTS">
-            <AdminPlaceholderPage
-              title="Product & Formulation Catalog"
-              subtitle="Manage ZIRON 30-capsule phase formulas, ingredients, and regulatory certifications."
-              code="CATALOG_01"
-              status="PLANNED"
-              milestoneDescription="Product and phase formulation models are scaffolded in Firestore schemas. Dynamic catalog editor planned for upcoming milestone."
-            />
+            <AdminProductsPage />
           </AdminRouteGuard>
         );
         break;
       case 'admin/codes':
         adminContent = (
           <AdminRouteGuard requiredPermission="MANAGE_CODES">
-            <AdminPlaceholderPage
-              title="Batch Codes & QR Registry"
-              subtitle="Oversee cryptographic container serials, batch lots, and activation records."
-              code="SERIAL_REG_01"
-              status="SCAFFOLDED"
-              milestoneDescription="Batch code and cryptographic activation schema active. Mass container generator and QR exporter interface planned for next milestone."
-            />
+            <AdminCodesPage />
           </AdminRouteGuard>
         );
         break;
