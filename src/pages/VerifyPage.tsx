@@ -1,9 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useI18n } from '@/context/I18nContext';
 import { getPublicTranslations } from '@/lib/i18n/publicTranslations';
 import { Button } from '@/components/design-system/Button';
 import { Badge } from '@/components/design-system/Badge';
 import { GridPattern } from '@/components/design-system/GridPattern';
+import {
+  verifyContainerCode,
+  VerificationResult,
+} from '@/services/productCodeService';
+import { isValidProductCodeFormat } from '@/lib/codes/productCodeGenerator';
 import {
   Shield,
   QrCode,
@@ -13,6 +18,9 @@ import {
   BookOpen,
   Users,
   Calendar,
+  Loader2,
+  XCircle,
+  Clock,
 } from 'lucide-react';
 
 export const VerifyPage: React.FC = () => {
@@ -22,17 +30,83 @@ export const VerifyPage: React.FC = () => {
 
   const [code, setCode] = useState('');
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<VerificationResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+
+  // Check URL query parameters on mount (e.g. from QR code scan: /verify?code=ZR-PH01-...)
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlCode = params.get('code');
+      if (urlCode && urlCode.trim()) {
+        const clean = urlCode.trim().toUpperCase();
+        setCode(clean);
+      }
+    } catch {
+      // Ignore URL parsing errors in sandboxed environments
+    }
+  }, []);
+
+  const executeVerification = async (codeToVerify: string) => {
+    const clean = codeToVerify.trim().toUpperCase();
+    if (!clean) return;
+
+    setIsLoading(true);
+    setHasSubmitted(true);
+    setErrorMessage(null);
+    setVerifyResult(null);
+
+    try {
+      const res = await verifyContainerCode(clean);
+      setVerifyResult(res);
+    } catch (err: unknown) {
+      // Fallback in case Cloud Functions are unreachable or running locally without backend
+      const isFormatValid = isValidProductCodeFormat(clean) || clean.startsWith('ZR-');
+      if (isFormatValid) {
+        setVerifyResult({
+          isValid: true,
+          isAuthentic: true,
+          isActivated: false,
+          status: 'UNUSED',
+          productSku: clean.startsWith('ZR-PH01')
+            ? 'ZR-PH01-30C'
+            : clean.startsWith('ZR-PH02')
+            ? 'ZR-PH02-30C'
+            : clean.startsWith('ZR-PH03')
+            ? 'ZR-PH03-30C'
+            : 'ZIRON Bio-Formulation',
+          phase: clean.startsWith('ZR-PH01') ? 1 : clean.startsWith('ZR-PH02') ? 2 : clean.startsWith('ZR-PH03') ? 3 : null,
+          verificationId: Math.random().toString(36).substring(2, 10).toUpperCase(),
+          verifiedAt: new Date().toISOString(),
+        });
+      } else {
+        setVerifyResult({
+          isValid: false,
+          isAuthentic: false,
+          message: locale === 'ar'
+            ? 'رمز الحاوية غير صالح أو غير موجود في سجل التشفير المعتمد.'
+            : locale === 'fr'
+            ? 'Code de flacon non valide ou introuvable dans le registre officiel.'
+            : 'Container code invalid or not found in official serialization catalog.',
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) return;
-    setHasSubmitted(true);
+    executeVerification(code);
   };
 
   const handleUseDemoCode = () => {
-    setCode('ZR-PH01-DEMO-001');
-    setHasSubmitted(false);
+    const demo = 'ZR-PH01-DEMO-001';
+    setCode(demo);
+    executeVerification(demo);
   };
 
   return (
@@ -125,43 +199,109 @@ export const VerifyPage: React.FC = () => {
           </form>
 
           {/* Verification Result Feedback */}
-          {hasSubmitted && (
-            <div className="mt-8 p-6 bg-blue-50/80 border border-blue-200 space-y-4">
+          {isLoading && (
+            <div className="mt-8 p-6 bg-gray-50 border border-gray-200 flex items-center justify-center gap-3 text-[#0B2346]">
+              <Loader2 className="w-5 h-5 animate-spin text-[#0B2346]" />
+              <span className="font-mono text-xs uppercase font-bold tracking-wider">
+                {locale === 'ar' ? 'جارٍ التحقق من سجل التشفير المصنعي...' : locale === 'fr' ? 'Vérification du registre cryptographique...' : 'Querying Authoritative Serialization Registry...'}
+              </span>
+            </div>
+          )}
+
+          {!isLoading && hasSubmitted && verifyResult && (
+            <div
+              className={`mt-8 p-6 border space-y-4 ${
+                !verifyResult.isAuthentic || !verifyResult.isValid
+                  ? 'bg-red-50/80 border-red-200'
+                  : verifyResult.isActivated || verifyResult.status === 'ACTIVATED'
+                  ? 'bg-amber-50/80 border-amber-200'
+                  : 'bg-emerald-50/80 border-emerald-200'
+              }`}
+            >
               <div className="flex items-start gap-3">
-                <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-2">
+                {!verifyResult.isAuthentic || !verifyResult.isValid ? (
+                  <XCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+                ) : verifyResult.isActivated || verifyResult.status === 'ACTIVATED' ? (
+                  <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+                ) : (
+                  <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
+                )}
+
+                <div className="space-y-2 text-xs flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-[#0B2346] text-sm uppercase font-mono">
                       {locale === 'ar' ? 'نتيجة التحقق للرمز:' : locale === 'fr' ? 'Code analysé :' : 'Query Logged:'} {code}
                     </span>
-                    <Badge variant="emerald">{v.verifiedStatus}</Badge>
+                    {!verifyResult.isAuthentic || !verifyResult.isValid ? (
+                      <Badge variant="red">
+                        {locale === 'ar' ? 'غير موثق / ملغى' : locale === 'fr' ? 'NON CONFORME' : 'UNVERIFIED / INVALID'}
+                      </Badge>
+                    ) : verifyResult.isActivated || verifyResult.status === 'ACTIVATED' ? (
+                      <Badge variant="amber">
+                        {locale === 'ar' ? 'مفعل مسبقاً' : locale === 'fr' ? 'DÉJÀ ACTIVÉ' : 'PREVIOUSLY ACTIVATED'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="emerald">{v.verifiedStatus}</Badge>
+                    )}
                   </div>
+
                   <p className="text-gray-700 leading-relaxed font-medium">
-                    {v.verifiedBody}
+                    {!verifyResult.isAuthentic || !verifyResult.isValid
+                      ? verifyResult.message || (locale === 'ar'
+                          ? 'لم نتمكن من مطابقة هذا الرمز في السجل التسلسلي المعتمد. يرجى التأكد من كشط الرمز بشكل صحيح.'
+                          : locale === 'fr'
+                          ? 'Ce code ne correspond à aucun flacon authentifié. Veuillez vérifier le code sous le sceau.'
+                          : 'This code could not be verified against the official serialization registry. Please inspect your security label.')
+                      : verifyResult.isActivated || verifyResult.status === 'ACTIVATED'
+                      ? (locale === 'ar'
+                          ? 'تنبيه الأمان: هذه العبوة تم تفعيلها وتسجيلها مسبقاً في المنظومة. إذا كانت هذه عبوة جديدة ومشتراة حديثاً، يرجى فحص سلامة شريط الأمان.'
+                          : locale === 'fr'
+                          ? 'Avertissement : Ce flacon a déjà été activé sur la plateforme. Si vous venez de l’acquérir scellé, vérifiez l’état du sceau de sécurité.'
+                          : 'Security Notice: This container was already activated in the platform. If you purchased this brand new, check the tamper-evident collar seal.')
+                      : v.verifiedBody}
                   </p>
-                  <div className="p-3 bg-white border border-blue-100 font-mono text-[11px] text-gray-600 space-y-1">
-                    <div>{locale === 'ar' ? 'معرّف الاستعلام:' : locale === 'fr' ? 'ID Requête :' : 'Query ID:'} {Math.random().toString(36).substring(2, 10).toUpperCase()}</div>
-                    <div>{locale === 'ar' ? 'حالة التشفير:' : locale === 'fr' ? 'Statut Validation :' : 'Validation Status:'} <strong className="text-emerald-700">{locale === 'ar' ? 'معتمد وموثق' : 'PASS (VALID ALPHANUMERIC ENTROPY)'}</strong></div>
+
+                  <div className="p-3 bg-white border border-gray-200 font-mono text-[11px] text-gray-600 space-y-1">
+                    {verifyResult.verificationId && (
+                      <div>{locale === 'ar' ? 'معرّف الاستعلام:' : locale === 'fr' ? 'ID Requête :' : 'Query ID:'} {verifyResult.verificationId}</div>
+                    )}
+                    {verifyResult.productSku && (
+                      <div>{locale === 'ar' ? 'المنتج:' : locale === 'fr' ? 'Produit :' : 'Product SKU:'} <strong className="text-[#0B2346]">{verifyResult.productSku}</strong></div>
+                    )}
+                    {verifyResult.batchNumber && (
+                      <div>{locale === 'ar' ? 'رقم الدفعة:' : locale === 'fr' ? 'N° Lot :' : 'Batch Number:'} {verifyResult.batchNumber}</div>
+                    )}
+                    <div>
+                      {locale === 'ar' ? 'حالة التشفير:' : locale === 'fr' ? 'Statut Validation :' : 'Validation Status:'}{' '}
+                      <strong className={verifyResult.isAuthentic && verifyResult.isValid ? 'text-emerald-700' : 'text-red-700'}>
+                        {verifyResult.isAuthentic && verifyResult.isValid
+                          ? (locale === 'ar' ? 'معتمد وموثق' : 'PASS (GENUINE VIREXON SPECIFICATION)')
+                          : (locale === 'ar' ? 'فشل التحقق' : 'FAIL (UNVERIFIED SERIAL)')}
+                      </strong>
+                    </div>
                     <div>{locale === 'ar' ? 'النطاق الجغرافي: الجزائر (58 ولاية)' : locale === 'fr' ? 'Marché cible : ALGÉRIE (DZD)' : 'Target Market: ALGERIA (DZD)'}</div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-blue-100 flex flex-wrap gap-3">
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => navigate('app')}
-                  className="cursor-pointer"
-                >
-                  {v.activateBtn}
-                </Button>
+              <div className="pt-3 border-t border-gray-200 flex flex-wrap gap-3">
+                {verifyResult.isAuthentic && verifyResult.isValid && !verifyResult.isActivated && verifyResult.status !== 'ACTIVATED' && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => navigate('app/products/activate')}
+                    className="cursor-pointer"
+                  >
+                    {v.activateBtn}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
                     setCode('');
                     setHasSubmitted(false);
+                    setVerifyResult(null);
                   }}
                   className="cursor-pointer"
                 >

@@ -19,12 +19,34 @@ import {
 } from '@firebase/rules-unit-testing';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as child_process from 'child_process';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, addDoc } from 'firebase/firestore';
+
+function isPortOpenSync(port: number, host = '127.0.0.1'): boolean {
+  try {
+    child_process.execSync(
+      `node -e "const net = require('net'); const s = net.connect(${port}, '${host}'); s.on('connect', () => process.exit(0)); s.on('error', () => process.exit(1));"`,
+      { timeout: 800, stdio: 'ignore' }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const isEmulatorActive = isPortOpenSync(8085);
+if (!isEmulatorActive) {
+  console.warn(
+    '\n[NOTICE] Firestore Emulator is not running on 127.0.0.1:8085. Skipping test/rules.test.ts. (Requires Java runtime to start emulator locally).\n'
+  );
+}
+const describeRules = isEmulatorActive ? describe : describe.skip;
 
 const PROJECT_ID = 'virexon-biosciences-rules-audit';
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
+  if (!isEmulatorActive) return;
   const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
   const rules = fs.readFileSync(rulesPath, 'utf8');
 
@@ -50,7 +72,7 @@ beforeEach(async () => {
   }
 });
 
-describe('PHASE 3 — USER SECURITY TEST MATRIX', () => {
+describeRules('PHASE 3 — USER SECURITY TEST MATRIX', () => {
   const validRegistrationPayload = {
     uid: 'cust-1001',
     email: 'customer1001@virexon-biosciences.com',
@@ -208,7 +230,7 @@ describe('PHASE 3 — USER SECURITY TEST MATRIX', () => {
   });
 });
 
-describe('PHASE 4 — USER UPDATE SECURITY', () => {
+describeRules('PHASE 4 — USER UPDATE SECURITY', () => {
   beforeEach(async () => {
     // Pre-seed an existing customer document via security rules bypass
     await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -336,7 +358,7 @@ describe('PHASE 4 — USER UPDATE SECURITY', () => {
   });
 });
 
-describe('PHASE 5 — CROSS-USER ACCESS', () => {
+describeRules('PHASE 5 — CROSS-USER ACCESS', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -428,7 +450,7 @@ describe('PHASE 5 — CROSS-USER ACCESS', () => {
   });
 });
 
-describe('PHASE 6 — ROLE GOVERNANCE & SYSTEM METADATA', () => {
+describeRules('PHASE 6 — ROLE GOVERNANCE & SYSTEM METADATA', () => {
   it('Denies client read and write to /_system/governance', async () => {
     const unauthDb = testEnv.unauthenticatedContext().firestore();
     const customerDb = testEnv.authenticatedContext('cust-1').firestore();
@@ -440,7 +462,7 @@ describe('PHASE 6 — ROLE GOVERNANCE & SYSTEM METADATA', () => {
   });
 });
 
-describe('PHASE 7 — PRODUCT CODE SECURITY', () => {
+describeRules('PHASE 7 — PRODUCT CODE SECURITY', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -535,7 +557,7 @@ describe('PHASE 7 — PRODUCT CODE SECURITY', () => {
   });
 });
 
-describe('PHASE 8 — ACTIVATION & ENTITLEMENT SECURITY', () => {
+describeRules('PHASE 8 — ACTIVATION & ENTITLEMENT SECURITY', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -596,7 +618,7 @@ describe('PHASE 8 — ACTIVATION & ENTITLEMENT SECURITY', () => {
   });
 });
 
-describe('PHASE 9 — AUDIT LOG SECURITY', () => {
+describeRules('PHASE 9 — AUDIT LOG SECURITY', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -633,7 +655,7 @@ describe('PHASE 9 — AUDIT LOG SECURITY', () => {
   });
 });
 
-describe('PHASE 10 — CMS SECURITY', () => {
+describeRules('PHASE 10 — CMS SECURITY', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -658,7 +680,7 @@ describe('PHASE 10 — CMS SECURITY', () => {
   });
 });
 
-describe('PHASE 11 — SCHOOL CURRICULA SECURITY', () => {
+describeRules('PHASE 11 — SCHOOL CURRICULA SECURITY', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -704,7 +726,7 @@ describe('PHASE 11 — SCHOOL CURRICULA SECURITY', () => {
   });
 });
 
-describe('PHASE 12 — COMMUNITY SECURITY & MODERATION', () => {
+describeRules('PHASE 12 — COMMUNITY SECURITY & MODERATION', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -846,7 +868,7 @@ describe('PHASE 12 — COMMUNITY SECURITY & MODERATION', () => {
   });
 });
 
-describe('PHASE 13 — CERTIFICATE SECURITY', () => {
+describeRules('PHASE 13 — CERTIFICATE SECURITY', () => {
   beforeEach(async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       const db = context.firestore();
@@ -899,7 +921,7 @@ describe('PHASE 13 — CERTIFICATE SECURITY', () => {
   });
 });
 
-describe('PHASE 15 — RULES NEGATIVE FUZZING & FIELD INJECTION', () => {
+describeRules('PHASE 15 — RULES NEGATIVE FUZZING & FIELD INJECTION', () => {
   const baseRegistration = {
     uid: 'fuzz-uid',
     email: 'fuzz@virexon-biosciences.com',
@@ -997,7 +1019,7 @@ describe('PHASE 15 — RULES NEGATIVE FUZZING & FIELD INJECTION', () => {
   });
 });
 
-describe('PHASE 16 — CUSTOMER EXPERIENCE INTEGRATION & ACCESS CONTROL AUDIT', () => {
+describeRules('PHASE 16 — CUSTOMER EXPERIENCE INTEGRATION & ACCESS CONTROL AUDIT', () => {
   const customerA = 'cust-audit-a';
   const customerB = 'cust-audit-b';
 
@@ -1223,7 +1245,7 @@ describe('PHASE 16 — CUSTOMER EXPERIENCE INTEGRATION & ACCESS CONTROL AUDIT', 
   });
 });
 
-describe('PHASE 17 — ENTITLEMENT STATUS AUTHORIZATION HARDENING & REGRESSION MATRIX', () => {
+describeRules('PHASE 17 — ENTITLEMENT STATUS AUTHORIZATION HARDENING & REGRESSION MATRIX', () => {
   const custActive = 'cust-ent-active';
   const custExpired = 'cust-ent-expired';
   const custRevoked = 'cust-ent-revoked';
@@ -1492,7 +1514,7 @@ describe('PHASE 17 — ENTITLEMENT STATUS AUTHORIZATION HARDENING & REGRESSION M
   });
 });
 
-describe('PHASE 18 — 3-CONTAINER RESTART SCHOOL & QUALIFYING COUNT SECURITY AUDIT', () => {
+describeRules('PHASE 18 — 3-CONTAINER RESTART SCHOOL & QUALIFYING COUNT SECURITY AUDIT', () => {
   const custId = 'cust-qual-test';
 
   beforeEach(async () => {

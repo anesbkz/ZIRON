@@ -34,6 +34,19 @@ export const ActivateProductPage: React.FC = () => {
     entitlements: string[];
   } | null>(null);
 
+  // Check URL query parameters on mount (e.g. redirected from /verify: /app/products/activate?code=ZR-...)
+  React.useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlCode = params.get('code');
+      if (urlCode && urlCode.trim()) {
+        setCode(urlCode.trim().toUpperCase());
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);

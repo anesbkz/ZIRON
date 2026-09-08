@@ -388,3 +388,40 @@ export async function getProductCode(code: string): Promise<ProductCode | null> 
     return null;
   }
 }
+
+/* ==========================================================================
+   PUBLIC VERIFICATION (SERVER-AUTHORITATIVE VIA CLOUD FUNCTIONS ONLY)
+   ========================================================================== */
+
+export interface VerificationResult {
+  isValid: boolean;
+  isAuthentic: boolean;
+  isActivated?: boolean;
+  status?: string;
+  phase?: number | null;
+  batchNumber?: string | null;
+  batchStatus?: string | null;
+  productSku?: string;
+  verificationId?: string;
+  verifiedAt?: string;
+  message?: string;
+}
+
+/**
+ * Invokes the authoritative `verifyContainerCode` callable Cloud Function.
+ * Verifies authenticity, activation state, and batch validity without leaking sensitive data.
+ */
+export async function verifyContainerCode(rawCode: string): Promise<VerificationResult> {
+  const cleanCode = (rawCode || '').trim().toUpperCase();
+  if (!cleanCode) {
+    throw new Error('Please enter a product verification code.');
+  }
+
+  const callable = httpsCallable<{ code: string }, VerificationResult>(
+    functionsInstance,
+    'verifyContainerCode'
+  );
+  const result = await callable({ code: cleanCode });
+  return result.data;
+}
+
