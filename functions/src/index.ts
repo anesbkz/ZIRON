@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import * as crypto from 'crypto';
 
 admin.initializeApp();
 
@@ -332,10 +333,98 @@ export const assignUserRoles = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Callable Function: Authoritative Product Container Verification
- * 
- * Public/authenticated endpoint allowing verification of product code validity
- * and authenticity without exposing the protected productCodes collection.
+ * Canonical Product Catalog SKUs supported for serial generation
+ */
+export const CANONICAL_CATALOG_SKUS: Record<
+  string,
+  { name: string; phasePrefix: string; phase: number }
+> = {
+  'ZR-PH01-30C': { name: 'ZIRON Phase 01 (30 Capsules)', phasePrefix: 'PH01', phase: 1 },
+  'ZR-PH02-30C': { name: 'ZIRON Phase 02 (30 Capsules)', phasePrefix: 'PH02', phase: 2 },
+  'ZR-PH03-30C': { name: 'ZIRON Phase 03 (30 Capsules)', phasePrefix: 'PH03', phase: 3 },
+  'ZR-BNDL-90C': { name: 'ZIRON Complete Bundle (90 Capsules)', phasePrefix: 'BNDL', phase: 1 },
+};
+
+export const CROCKFORD_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * Normalizes user-submitted or generated product codes.
+ * Removes spaces, hyphens, and punctuation, and uppercases.
+ */
+export function normalizeProductCode(code: string): string {
+  return (code || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * Generates an unambiguous random Crockford Base32 segment of specified length.
+ * Uses cryptographically secure random bytes from Node.js crypto.
+ */
+export function generateCrockfordSegment(length: number): string {
+  const bytes = crypto.randomBytes(length);
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += CROCKFORD_ALPHABET[bytes[i] % CROCKFORD_ALPHABET.length];
+  }
+  return result;
+}
+
+/**
+ * Generates a human-readable, cryptographically secure ZIRON container serial.
+ * Format: ZR-<PHASE>-<XXXX>-<XXXX>-<XXXX> (e.g., ZR-PH01-7K9A-3F2W-M8PX)
+ */
+export function generateSecureProductCode(phasePrefix: string): string {
+  const seg1 = generateCrockfordSegment(4);
+  const seg2 = generateCrockfordSegment(4);
+  const seg3 = generateCrockfordSegment(4);
+  return `ZR-${phasePrefix}-${seg1}-${seg2}-${seg3}`;
+}
+
+/**
+ * Authoritative RBAC verification for product code and batch management.
+ * Strictly verifies SUPER_ADMIN, ADMIN, or PRODUCT_MANAGER roles from the server Firestore profile.
+ */
+async function assertCanManageCodes(
+  context: functions.https.CallableContext
+): Promise<{ callerUid: string; callerEmail: string; callerRoles: string[] }> {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+  }
+
+  const callerUid = context.auth.uid;
+  const callerSnap = await db.collection('users').doc(callerUid).get();
+  if (!callerSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+  }
+  const callerData = callerSnap.data()!;
+  if (callerData.status !== 'active') {
+    throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+  }
+
+  const callerRoles: string[] = callerData.roles || [];
+  const callerEmail = context.auth.token.email || '';
+  const isEmailVerified = context.auth.token.email_verified === true;
+  const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+
+  const isAuthorized =
+    isCallerSuperAdmin ||
+    callerRoles.includes('ADMIN') ||
+    callerRoles.includes('PRODUCT_MANAGER');
+
+  if (!isAuthorized) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Caller lacks authority to manage product codes (requires SUPER_ADMIN, ADMIN, or PRODUCT_MANAGER).'
+    );
+  }
+
+  return { callerUid, callerEmail, callerRoles };
+}
+
+/**
+ * Callable Function: Public Container Serial Verification
  * Returns non-sensitive public validation status, phase, batch, and sku.
  */
 export const verifyContainerCode = functions.https.onCall(async (data) => {
@@ -348,7 +437,7 @@ export const verifyContainerCode = functions.https.onCall(async (data) => {
     );
   }
 
-  // Pre-locate product code document reference
+  // Pre-locate product code document reference (supports direct docId, code field, or normalized code)
   const codeDocRef = db.collection('productCodes').doc(rawCode);
   let codeSnap = await codeDocRef.get();
 
@@ -359,26 +448,50 @@ export const verifyContainerCode = functions.https.onCall(async (data) => {
       .limit(1)
       .get();
     if (codeQuery.empty) {
-      return {
-        isValid: false,
-        isAuthentic: false,
-        message: `Product container code "${rawCode}" not found in serialization catalog.`,
-      };
+      const normalized = normalizeProductCode(rawCode);
+      const normQuery = await db
+        .collection('productCodes')
+        .where('normalizedCode', '==', normalized)
+        .limit(1)
+        .get();
+      if (normQuery.empty) {
+        return {
+          isValid: false,
+          isAuthentic: false,
+          message: `Product container code "${rawCode}" not found in serialization catalog.`,
+        };
+      }
+      codeSnap = normQuery.docs[0];
+    } else {
+      codeSnap = codeQuery.docs[0];
     }
-    codeSnap = codeQuery.docs[0];
   }
 
   const codeData = codeSnap.data()!;
   const now = new Date().toISOString();
 
+  // Check batch status if associated with a manufacturing batch
+  let batchStatus: string | null = null;
+  if (codeData.batchId) {
+    const batchSnap = await db.collection('batches').doc(codeData.batchId).get();
+    if (batchSnap.exists) {
+      batchStatus = batchSnap.data()?.status || null;
+    }
+  }
+
+  const isCodeDisabled = codeData.status === 'DISABLED' || codeData.status === 'REVOKED';
+  const isBatchDisabled = batchStatus === 'DISABLED' || batchStatus === 'ARCHIVED';
+
   return {
-    isValid: true,
+    isValid: !isCodeDisabled && !isBatchDisabled,
     isAuthentic: true,
-    isActivated: !!codeData.isActivated,
+    isActivated: !!codeData.isActivated || codeData.status === 'ACTIVATED',
+    status: codeData.status || (codeData.isActivated ? 'ACTIVATED' : 'UNUSED'),
     phase: codeData.phase || null,
     batchNumber: codeData.batchNumber || codeData.batchId || null,
+    batchStatus,
     productSku: codeData.productSku || 'ZIRON Bio-Formulation',
-    verificationId: Math.random().toString(36).substring(2, 10).toUpperCase(),
+    verificationId: crypto.randomBytes(6).toString('hex').toUpperCase(),
     verifiedAt: now,
   };
 });
@@ -387,12 +500,13 @@ export const verifyContainerCode = functions.https.onCall(async (data) => {
  * Callable Function: Authoritative Product Code Activation & Entitlement Granting
  * CONCURRENCY-SAFE ATOMIC TRANSACTION:
  * 1. Locates product code inside transaction
- * 2. Verifies code is unactivated
- * 3. Marks code activated
- * 4. Creates activation record
- * 5. Creates authoritative entitlements
- * 6. Updates user cache flags, XP (+50 XP), and level
- * 7. Writes authoritative activation audit log
+ * 2. Verifies code is unactivated and not DISABLED/REVOKED
+ * 3. Verifies parent batch is ACTIVE (not DISABLED or ARCHIVED)
+ * 4. Marks code activated and increments batch activatedCodes
+ * 5. Creates activation record
+ * 6. Creates authoritative entitlements
+ * 7. Updates user cache flags, XP (+50 XP), and level
+ * 8. Writes authoritative activation audit log
  */
 export const activateContainerCode = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -406,7 +520,7 @@ export const activateContainerCode = functions.https.onCall(async (data, context
   const callerEmail = context.auth.token.email || '';
   const callerSnap = await db.collection('users').doc(callerUid).get();
   const callerRoles: string[] = callerSnap.data()?.roles || ['CUSTOMER'];
-  const rawCode = (data.code || '').trim().toUpperCase();
+  const rawCode = (data?.code || '').trim().toUpperCase();
 
   if (!rawCode) {
     throw new functions.https.HttpsError(
@@ -415,7 +529,7 @@ export const activateContainerCode = functions.https.onCall(async (data, context
     );
   }
 
-  // Pre-locate product code document reference (supports either field lookup or docId lookup)
+  // Pre-locate product code document reference (supports direct docId, field lookup, or normalizedCode)
   let codeDocRef = db.collection('productCodes').doc(rawCode);
   const directSnap = await codeDocRef.get();
   if (!directSnap.exists) {
@@ -425,12 +539,22 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       .limit(1)
       .get();
     if (codeQuery.empty) {
-      throw new functions.https.HttpsError(
-        'not-found',
-        `Product container code "${rawCode}" is not registered in the VIREXON serialization catalog.`
-      );
+      const normalized = normalizeProductCode(rawCode);
+      const normQuery = await db
+        .collection('productCodes')
+        .where('normalizedCode', '==', normalized)
+        .limit(1)
+        .get();
+      if (normQuery.empty) {
+        throw new functions.https.HttpsError(
+          'not-found',
+          `Product container code "${rawCode}" is not registered in the VIREXON serialization catalog.`
+        );
+      }
+      codeDocRef = normQuery.docs[0].ref;
+    } else {
+      codeDocRef = codeQuery.docs[0].ref;
     }
-    codeDocRef = codeQuery.docs[0].ref;
   }
 
   // Concurrency-safe atomic transaction
@@ -444,11 +568,40 @@ export const activateContainerCode = functions.https.onCall(async (data, context
     }
 
     const codeData = codeSnap.data()!;
-    if (codeData.isActivated) {
+    if (codeData.status === 'ACTIVATED' || codeData.isActivated) {
       throw new functions.https.HttpsError(
         'already-exists',
         'This container has already been activated.'
       );
+    }
+
+    if (codeData.status === 'DISABLED' || codeData.status === 'REVOKED') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `This container code is ${codeData.status.toLowerCase()} and cannot be activated.`
+      );
+    }
+
+    // Read parent batch using batchId if present
+    let batchDocRef: admin.firestore.DocumentReference | null = null;
+    if (codeData.batchId) {
+      batchDocRef = db.collection('batches').doc(codeData.batchId);
+      const batchSnap = await transaction.get(batchDocRef);
+      if (batchSnap.exists) {
+        const batchData = batchSnap.data()!;
+        if (batchData.status === 'DISABLED') {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            'This manufacturing batch is currently on hold or disabled.'
+          );
+        }
+        if (batchData.status === 'ARCHIVED') {
+          throw new functions.https.HttpsError(
+            'failed-precondition',
+            'This manufacturing batch has been archived.'
+          );
+        }
+      }
     }
 
     // Authoritative qualification logic:
@@ -466,7 +619,7 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       }
     });
     // Add current container being activated
-    distinctContainerCodes.add(rawCode);
+    distinctContainerCodes.add(codeData.code || rawCode);
     const qualifyingContainerCount = distinctContainerCodes.size;
 
     // Check if user already holds an earned SCHOOL_ACCESS entitlement (Earned Access Rule)
@@ -488,14 +641,25 @@ export const activateContainerCode = functions.https.onCall(async (data, context
 
     const now = new Date().toISOString();
     const productSku = codeData.productSku || 'VIR-CONTAINER-DEFAULT';
+    const activationDocRef = db.collection('activations').doc();
 
     // 1. Mark code as activated (permanently bound to callerUid)
     transaction.update(codeDocRef, {
+      status: 'ACTIVATED',
       isActivated: true,
       activatedByUserId: callerUid,
       activatedAt: now,
+      activationId: activationDocRef.id,
       updatedAt: now,
     });
+
+    // Increment parent batch's activatedCodes if batch exists
+    if (batchDocRef) {
+      transaction.update(batchDocRef, {
+        activatedCodes: admin.firestore.FieldValue.increment(1),
+        updatedAt: now,
+      });
+    }
 
     // 2. Base container entitlements granted on every container
     const entitlementsToGrant: string[] = ['COMMUNITY_ACCESS', 'PHASE_TRAJECTORY'];
@@ -504,12 +668,14 @@ export const activateContainerCode = functions.https.onCall(async (data, context
     }
 
     // 3. Create activation record
-    const activationDocRef = db.collection('activations').doc();
     transaction.set(activationDocRef, {
       id: activationDocRef.id,
-      code: rawCode,
+      code: codeData.code || rawCode,
+      normalizedCode: codeData.normalizedCode || normalizeProductCode(rawCode),
       userId: callerUid,
       productSku,
+      batchId: codeData.batchId || null,
+      batchNumber: codeData.batchNumber || null,
       activatedAt: now,
       entitlementsGranted: entitlementsToGrant,
       qualifyingContainerCount,
@@ -523,7 +689,7 @@ export const activateContainerCode = functions.https.onCall(async (data, context
         userId: callerUid,
         entitlementType: entType,
         sourceProductSku: productSku,
-        sourceCode: rawCode,
+        sourceCode: codeData.code || rawCode,
         activationId: activationDocRef.id,
         status: 'ACTIVE',
         grantedAt: now,
@@ -539,7 +705,7 @@ export const activateContainerCode = functions.https.onCall(async (data, context
         userId: callerUid,
         entitlementType: 'SCHOOL_ACCESS',
         sourceProductSku: productSku,
-        sourceCode: rawCode,
+        sourceCode: codeData.code || rawCode,
         source: 'THREE_CONTAINERS',
         activationId: activationDocRef.id,
         status: 'ACTIVE',
@@ -573,8 +739,10 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       resourceId: codeDocRef.id,
       timestamp: now,
       metadata: {
-        code: rawCode,
+        code: codeData.code || rawCode,
         productSku,
+        batchId: codeData.batchId || null,
+        batchNumber: codeData.batchNumber || null,
         activationId: activationDocRef.id,
         qualifyingContainerCount,
         schoolUnlocked: qualifiesForSchool,
@@ -596,6 +764,350 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       level,
     };
   });
+});
+
+/**
+ * Callable Function: Cryptographically Secure Product Code Generation
+ * Generates unique, Crockford Base32-formatted serialization serials for containers.
+ * Restricts access to SUPER_ADMIN, ADMIN, or PRODUCT_MANAGER.
+ * Validates batch existence and active status.
+ * Updates batch totalCodes atomically.
+ */
+export const generateProductCodes = functions.https.onCall(async (data, context) => {
+  const { callerUid, callerEmail, callerRoles } = await assertCanManageCodes(context);
+
+  const { quantity, productSku, batchId } = data || {};
+
+  // 1. Validate quantity
+  if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity < 1 || quantity > 500) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Quantity must be an integer between 1 and 500.'
+    );
+  }
+
+  // 2. Validate productSku
+  if (!productSku || typeof productSku !== 'string' || !CANONICAL_CATALOG_SKUS[productSku]) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Product SKU "${productSku}" is not recognized in the canonical catalog. Allowed: ${Object.keys(CANONICAL_CATALOG_SKUS).join(', ')}`
+    );
+  }
+
+  // 3. Validate batchId and batch ACTIVE status
+  if (!batchId || typeof batchId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Valid batchId is required.');
+  }
+
+  const batchDocRef = db.collection('batches').doc(batchId);
+  const batchSnap = await batchDocRef.get();
+  if (!batchSnap.exists) {
+    throw new functions.https.HttpsError('not-found', `Batch "${batchId}" does not exist.`);
+  }
+
+  const batchData = batchSnap.data()!;
+  if (batchData.status !== 'ACTIVE') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      `Batch "${batchId}" is not ACTIVE (current status: ${batchData.status}). Codes can only be generated for ACTIVE batches.`
+    );
+  }
+
+  const skuConfig = CANONICAL_CATALOG_SKUS[productSku];
+
+  // 4. Cryptographically generate unique codes (in-memory candidate generation)
+  const generatedCodes = new Set<string>();
+  const codeItems: { code: string; normalizedCode: string }[] = [];
+
+  while (codeItems.length < quantity) {
+    const code = generateSecureProductCode(skuConfig.phasePrefix);
+    const normalized = normalizeProductCode(code);
+    if (!generatedCodes.has(normalized)) {
+      generatedCodes.add(normalized);
+      codeItems.push({ code, normalizedCode: normalized });
+    }
+  }
+
+  // 5. Check collisions against existing productCodes in Firestore
+  const validCodeItems: { code: string; normalizedCode: string }[] = [];
+  const candidateDocRefs = codeItems.map((item) => db.collection('productCodes').doc(item.code));
+
+  // Chunk reads to respect Firestore getAll limits
+  const CHUNK_READ_SIZE = 100;
+  const existingSnapshots: admin.firestore.DocumentSnapshot[] = [];
+  for (let i = 0; i < candidateDocRefs.length; i += CHUNK_READ_SIZE) {
+    const chunk = candidateDocRefs.slice(i, i + CHUNK_READ_SIZE);
+    const snaps = await db.getAll(...chunk);
+    existingSnapshots.push(...snaps);
+  }
+
+  for (let i = 0; i < existingSnapshots.length; i++) {
+    if (!existingSnapshots[i].exists) {
+      validCodeItems.push(codeItems[i]);
+    } else {
+      // Collision detected! Regenerate unique replacement
+      let replacementFound = false;
+      while (!replacementFound) {
+        const repCode = generateSecureProductCode(skuConfig.phasePrefix);
+        const repNorm = normalizeProductCode(repCode);
+        if (!generatedCodes.has(repNorm)) {
+          generatedCodes.add(repNorm);
+          const repSnap = await db.collection('productCodes').doc(repCode).get();
+          if (!repSnap.exists) {
+            validCodeItems.push({ code: repCode, normalizedCode: repNorm });
+            replacementFound = true;
+          }
+        }
+      }
+    }
+  }
+
+  const now = new Date().toISOString();
+  const codeDocs = validCodeItems.map((item) => ({
+    id: item.code,
+    code: item.code,
+    normalizedCode: item.normalizedCode,
+    productSku,
+    phase: skuConfig.phase,
+    batchId,
+    batchNumber: batchData.batchNumber || batchId,
+    status: 'UNUSED',
+    isActivated: false,
+    activatedByUserId: null,
+    activatedAt: null,
+    activationId: null,
+    grantsSchoolAccess: true,
+    grantsCommunityAccess: true,
+    createdAt: now,
+    createdBy: callerUid,
+    exportCount: 0,
+    lastExportedAt: null,
+  }));
+
+  // 6. Commit documents in safe chunks of 400 (under Firestore's 500-op batch write limit)
+  const WRITE_CHUNK_SIZE = 400;
+  for (let i = 0; i < codeDocs.length; i += WRITE_CHUNK_SIZE) {
+    const chunk = codeDocs.slice(i, i + WRITE_CHUNK_SIZE);
+    const batchWrite = db.batch();
+    for (const docData of chunk) {
+      batchWrite.set(db.collection('productCodes').doc(docData.id), docData);
+    }
+    await batchWrite.commit();
+  }
+
+  // 7. Atomically increment batch totalCodes count
+  await batchDocRef.update({
+    totalCodes: admin.firestore.FieldValue.increment(quantity),
+    updatedAt: now,
+  });
+
+  // 8. Write authoritative audit log
+  await writeAuthoritativeAuditLog(db, {
+    actorUserId: callerUid,
+    actorEmail: callerEmail,
+    actorRoles: callerRoles,
+    action: 'PRODUCT_CODES_GENERATED',
+    resourceType: 'productCodes',
+    resourceId: batchId,
+    metadata: {
+      batchId,
+      batchNumber: batchData.batchNumber || batchId,
+      productSku,
+      quantity,
+      sampleCodes: codeDocs.slice(0, 3).map((d) => d.code),
+    },
+  });
+
+  return {
+    success: true,
+    batchId,
+    batchNumber: batchData.batchNumber || batchId,
+    productSku,
+    quantity,
+    codes: codeDocs.map((d) => d.code),
+  };
+});
+
+/**
+ * Callable Function: Authoritative Manufacturing Batch Creation
+ * Initializes a new manufacturing batch record with status ACTIVE and 0 initial codes.
+ * Requires SUPER_ADMIN, ADMIN, or PRODUCT_MANAGER role.
+ */
+export const createProductBatch = functions.https.onCall(async (data, context) => {
+  const { callerUid, callerEmail, callerRoles } = await assertCanManageCodes(context);
+
+  const {
+    productSku,
+    batchNumber: rawBatchNumber,
+    manufactureDate,
+    expiryDate,
+    notes,
+    coaUrl,
+  } = data || {};
+
+  if (!productSku || typeof productSku !== 'string' || !CANONICAL_CATALOG_SKUS[productSku]) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Valid productSku from catalog is required. Allowed: ${Object.keys(CANONICAL_CATALOG_SKUS).join(', ')}`
+    );
+  }
+
+  const batchNumber = (rawBatchNumber || '').trim().toUpperCase();
+  if (!batchNumber || batchNumber.length < 3) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Valid batchNumber is required (minimum 3 characters).'
+    );
+  }
+
+  if (!manufactureDate || typeof manufactureDate !== 'string') {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Valid manufactureDate is required.'
+    );
+  }
+
+  if (!expiryDate || typeof expiryDate !== 'string') {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Valid expiryDate is required.'
+    );
+  }
+
+  // Ensure unique batchNumber across batches collection
+  const existingBatchQuery = await db
+    .collection('batches')
+    .where('batchNumber', '==', batchNumber)
+    .limit(1)
+    .get();
+
+  if (!existingBatchQuery.empty) {
+    throw new functions.https.HttpsError(
+      'already-exists',
+      `Batch with batchNumber "${batchNumber}" already exists.`
+    );
+  }
+
+  const batchRef = db.collection('batches').doc();
+  const now = new Date().toISOString();
+  const skuInfo = CANONICAL_CATALOG_SKUS[productSku];
+
+  const batchDoc = {
+    id: batchRef.id,
+    batchNumber,
+    productSku,
+    productName: skuInfo.name,
+    manufactureDate,
+    expiryDate,
+    status: 'ACTIVE',
+    testingStatus: 'PENDING',
+    totalCodes: 0,
+    activatedCodes: 0,
+    disabledCodes: 0,
+    notes: typeof notes === 'string' ? notes.trim() : '',
+    coaUrl: typeof coaUrl === 'string' ? coaUrl.trim() : null,
+    createdAt: now,
+    createdBy: callerUid,
+    updatedAt: now,
+  };
+
+  await batchRef.set(batchDoc);
+
+  await writeAuthoritativeAuditLog(db, {
+    actorUserId: callerUid,
+    actorEmail: callerEmail,
+    actorRoles: callerRoles,
+    action: 'BATCH_CREATED',
+    resourceType: 'batches',
+    resourceId: batchRef.id,
+    metadata: {
+      batchId: batchRef.id,
+      batchNumber,
+      productSku,
+      productName: skuInfo.name,
+      manufactureDate,
+      expiryDate,
+    },
+  });
+
+  return {
+    success: true,
+    batchId: batchRef.id,
+    batchNumber,
+    productSku,
+    status: 'ACTIVE',
+  };
+});
+
+/**
+ * Callable Function: Authoritative Batch Status Transition
+ * Allows SUPER_ADMIN, ADMIN, or PRODUCT_MANAGER to transition batch status between ACTIVE, DISABLED, and ARCHIVED.
+ * Centralized batch status protects all child codes without modifying every code document individually.
+ */
+export const updateBatchStatus = functions.https.onCall(async (data, context) => {
+  const { callerUid, callerEmail, callerRoles } = await assertCanManageCodes(context);
+
+  const { batchId, status } = data || {};
+
+  if (!batchId || typeof batchId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Valid batchId is required.');
+  }
+
+  const allowedStatuses = ['ACTIVE', 'DISABLED', 'ARCHIVED'];
+  if (!status || !allowedStatuses.includes(status)) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      `Invalid status "${status}". Allowed: ${allowedStatuses.join(', ')}`
+    );
+  }
+
+  const batchRef = db.collection('batches').doc(batchId);
+  const batchSnap = await batchRef.get();
+  if (!batchSnap.exists) {
+    throw new functions.https.HttpsError('not-found', `Batch "${batchId}" not found.`);
+  }
+
+  const batchData = batchSnap.data()!;
+  const previousStatus = batchData.status;
+
+  if (previousStatus === status) {
+    return {
+      success: true,
+      batchId,
+      previousStatus,
+      newStatus: status,
+      message: 'Status unchanged.',
+    };
+  }
+
+  const now = new Date().toISOString();
+  await batchRef.update({
+    status,
+    updatedAt: now,
+    updatedBy: callerUid,
+  });
+
+  await writeAuthoritativeAuditLog(db, {
+    actorUserId: callerUid,
+    actorEmail: callerEmail,
+    actorRoles: callerRoles,
+    action: 'BATCH_STATUS_CHANGED',
+    resourceType: 'batches',
+    resourceId: batchId,
+    metadata: {
+      batchId,
+      batchNumber: batchData.batchNumber || batchId,
+      previousStatus,
+      newStatus: status,
+    },
+  });
+
+  return {
+    success: true,
+    batchId,
+    previousStatus,
+    newStatus: status,
+  };
 });
 
 /**

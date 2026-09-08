@@ -235,6 +235,16 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // MANUFACTURING BATCHES
+    // Read/list restricted to staff roles (SUPER_ADMIN, ADMIN, PRODUCT_MANAGER, etc.).
+    // Direct client mutation is strictly forbidden; batches are managed exclusively via Cloud Functions.
+    // =========================================================================
+    match /batches/{batchId} {
+      allow get, list: if isStaff();
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
     // PRODUCT CODES COLLECTION (Cryptographic Container Serials)
     // Activation is strictly server-authoritative (activateContainerCode Cloud Function).
     // Client creation enforces unactivated initial state.
@@ -247,16 +257,18 @@ service cloud.firestore {
       allow create: if (
         hasStaffRole(['SUPER_ADMIN', 'ADMIN', 'PRODUCT_MANAGER']) &&
         incoming().isActivated == false &&
+        (!('status' in incoming()) || incoming().status == 'UNUSED') &&
         (!('activatedByUserId' in incoming()) || incoming().activatedByUserId == null) &&
         (!('activatedAt' in incoming()) || incoming().activatedAt == null)
       );
 
       // Direct client updates restricted to safe administrative metadata only.
-      // isActivated, activatedByUserId, activatedAt CANNOT be modified from the client.
+      // isActivated, activatedByUserId, activatedAt, code, id CANNOT be modified from the client.
       allow update: if (
         hasStaffRole(['SUPER_ADMIN', 'ADMIN', 'PRODUCT_MANAGER']) &&
-        !incoming().diff(existing()).affectedKeys().hasAny(['isActivated', 'activatedByUserId', 'activatedAt', 'code', 'id']) &&
-        incoming().diff(existing()).affectedKeys().hasOnly(['batchId', 'productSku', 'metadata', 'expiresAt', 'updatedAt', 'notes', 'status', 'description'])
+        !incoming().diff(existing()).affectedKeys().hasAny(['isActivated', 'activatedByUserId', 'activatedAt', 'code', 'id', 'normalizedCode', 'createdAt', 'createdBy']) &&
+        (!('status' in incoming()) || incoming().status != 'ACTIVATED') &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['batchId', 'productSku', 'metadata', 'expiresAt', 'updatedAt', 'notes', 'status', 'description', 'qrPayload'])
       );
 
       // Staff may delete unactivated codes; activated codes cannot be deleted to preserve provenance

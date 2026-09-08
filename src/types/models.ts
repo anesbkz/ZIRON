@@ -239,28 +239,97 @@ export interface ProductModel {
   createdAt: string;
 }
 
+export type BatchStatus = 'ACTIVE' | 'DISABLED' | 'ARCHIVED';
+export type ProductCodeStatus = 'UNUSED' | 'ACTIVATED' | 'DISABLED' | 'REVOKED';
+
 export interface BatchModel {
   id: string;
   batchNumber: string;
   productSku: string;
+  productName?: string;
   manufactureDate: string;
   expiryDate: string;
+  status: BatchStatus;
   testingStatus: 'PENDING' | 'PASS' | 'FLAGGED';
-  coaUrl?: string;
+  totalCodes: number;
+  activatedCodes: number;
+  disabledCodes: number;
+  coaUrl?: string | null;
   notes?: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
 }
 
 export interface ProductCodeModel {
   id: string;
-  code: string; // e.g. ZR-PH01-XXXX-XXXX
+  code: string; // e.g. ZR-PH01-XXXX-XXXX-XXXX
+  normalizedCode?: string;
   batchId: string;
+  batchNumber?: string;
   productSku: string;
+  phase?: number;
+  status: ProductCodeStatus;
   isActivated: boolean;
-  activatedByUserId?: string;
-  activatedAt?: string;
+  activatedByUserId?: string | null;
+  activatedAt?: string | null;
+  activationId?: string | null;
   grantsSchoolAccess: boolean;
   grantsCommunityAccess: boolean;
+  exportCount?: number;
+  lastExportedAt?: string | null;
+  qrPayload?: string;
   createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+}
+
+export type ProductBatch = BatchModel;
+export type ProductCode = ProductCodeModel;
+
+export interface GenerationRequest {
+  quantity: number;
+  productSku: string;
+  batchId: string;
+}
+
+export interface GenerationResult {
+  success: boolean;
+  batchId: string;
+  batchNumber: string;
+  productSku: string;
+  quantity: number;
+  codes: string[];
+}
+
+export interface BatchCreationRequest {
+  productSku: string;
+  batchNumber: string;
+  manufactureDate: string;
+  expiryDate: string;
+  notes?: string;
+  coaUrl?: string | null;
+}
+
+export interface BatchCreationResult {
+  success: boolean;
+  batchId: string;
+  batchNumber: string;
+  productSku: string;
+  status: BatchStatus;
+}
+
+export interface BatchStatusUpdateRequest {
+  batchId: string;
+  status: BatchStatus;
+}
+
+export interface BatchStatusUpdateResult {
+  success: boolean;
+  batchId: string;
+  previousStatus: string;
+  newStatus: BatchStatus;
+  message?: string;
 }
 
 /* ==========================================================================
@@ -274,7 +343,11 @@ export type AuditActionType =
   | 'PRODUCT_CREATED'
   | 'PRODUCT_UPDATED'
   | 'PRODUCT_CODE_CREATED'
+  | 'PRODUCT_CODES_GENERATED'
   | 'PRODUCT_CODE_ACTIVATED'
+  | 'BATCH_CREATED'
+  | 'BATCH_STATUS_CHANGED'
+  | 'PRODUCT_CODES_EXPORTED'
   | 'ENTITLEMENT_GRANTED'
   | 'CATEGORY_CREATED'
   | 'CATEGORY_UPDATED'
