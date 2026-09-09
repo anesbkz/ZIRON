@@ -9,11 +9,16 @@ import {
   orderBy,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { SchoolCategory, SchoolCourse, UserProfile } from '@/types/models';
+import { SchoolCategory, SchoolCourse, SchoolModule, SchoolLesson, SchoolProgress, EnrollmentRecord, UserProfile } from '@/types/models';
 import { hasPermission } from '@/lib/rbac/permissions';
+import { SEED_COURSES, SEED_MODULES, SEED_LESSONS } from '@/data/seedSchoolData';
 
 const CATEGORIES_COLLECTION = 'schoolCategories';
 const COURSES_COLLECTION = 'schoolCourses';
+const MODULES_COLLECTION = 'schoolModules';
+const LESSONS_COLLECTION = 'schoolLessons';
+const ENROLLMENTS_COLLECTION = 'enrollments';
+const PROGRESS_COLLECTION = 'schoolProgress';
 
 export const DEFAULT_SEED_CATEGORIES: Omit<SchoolCategory, 'id' | 'createdAt' | 'updatedAt'>[] = [
   {
@@ -283,14 +288,47 @@ export async function listCoursesByCategory(
       orderBy('displayOrder', 'asc')
     );
     const snap = await getDocs(q);
-    const courses = snap.docs.map((d) => ({
-      id: d.id,
-      ...(d.data() as Omit<SchoolCourse, 'id'>),
-    }));
-    return includeUnpublished ? courses : courses.filter((c) => c.isPublished);
+    if (!snap.empty) {
+      const courses = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<SchoolCourse, 'id'>),
+      }));
+      return includeUnpublished ? courses : courses.filter((c) => c.isPublished);
+    }
+
+    // Fallback to seed courses matching categoryId or category slug
+    const seedMatches = SEED_COURSES.filter(
+      (c) => c.categoryId === categoryId || categoryId.includes(c.categoryId.replace('seed-', ''))
+    );
+    return includeUnpublished ? seedMatches : seedMatches.filter((c) => c.isPublished);
   } catch (error) {
     console.warn(`Could not load courses for category ${categoryId}:`, error);
-    return [];
+    const seedMatches = SEED_COURSES.filter(
+      (c) => c.categoryId === categoryId || categoryId.includes(c.categoryId.replace('seed-', ''))
+    );
+    return includeUnpublished ? seedMatches : seedMatches.filter((c) => c.isPublished);
+  }
+}
+
+/**
+ * List all courses across categories.
+ */
+export async function listAllCourses(includeUnpublished = false): Promise<SchoolCourse[]> {
+  try {
+    const colRef = collection(db, COURSES_COLLECTION);
+    const snap = await getDocs(colRef);
+    if (!snap.empty) {
+      const courses = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<SchoolCourse, 'id'>),
+      }));
+      const sorted = courses.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      return includeUnpublished ? sorted : sorted.filter((c) => c.isPublished);
+    }
+    return includeUnpublished ? SEED_COURSES : SEED_COURSES.filter((c) => c.isPublished);
+  } catch (error) {
+    console.warn('Error reading courses:', error);
+    return includeUnpublished ? SEED_COURSES : SEED_COURSES.filter((c) => c.isPublished);
   }
 }
 
@@ -349,4 +387,358 @@ export async function getUserCertificates(userId: string) {
     return [];
   }
 }
+
+/* ==========================================================================
+   MODULES API
+   ========================================================================== */
+
+/**
+ * List modules belonging to a course.
+ */
+export async function listModulesByCourse(
+  courseId: string,
+  includeUnpublished = false
+): Promise<SchoolModule[]> {
+  try {
+    const q = query(
+      collection(db, MODULES_COLLECTION),
+      where('courseId', '==', courseId),
+      orderBy('displayOrder', 'asc')
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const modules = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<SchoolModule, 'id'>),
+      }));
+      return includeUnpublished ? modules : modules.filter((m) => m.isPublished);
+    }
+    const seedModules = SEED_MODULES.filter((m) => m.courseId === courseId);
+    return includeUnpublished ? seedModules : seedModules.filter((m) => m.isPublished);
+  } catch (error) {
+    console.warn(`Could not load modules for course ${courseId}:`, error);
+    const seedModules = SEED_MODULES.filter((m) => m.courseId === courseId);
+    return includeUnpublished ? seedModules : seedModules.filter((m) => m.isPublished);
+  }
+}
+
+/**
+ * Admin/Staff: Create a School Module via authoritative Cloud Function.
+ */
+export async function createSchoolModule(
+  data: Omit<SchoolModule, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> {
+  const callable = httpsCallable<
+    Omit<SchoolModule, 'id' | 'createdAt' | 'updatedAt'>,
+    { success: boolean; id: string }
+  >(functionsInstance, 'createSchoolModule');
+
+  try {
+    const res = await callable(data);
+    return res.data.id;
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to create school module.');
+  }
+}
+
+/**
+ * Admin/Staff: Update a School Module via authoritative Cloud Function.
+ */
+export async function updateSchoolModule(
+  moduleId: string,
+  updates: Partial<SchoolModule>
+): Promise<void> {
+  const callable = httpsCallable<
+    { moduleId: string; updates: Partial<SchoolModule> },
+    { success: boolean; moduleId: string }
+  >(functionsInstance, 'updateSchoolModule');
+
+  try {
+    await callable({ moduleId, updates });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to update school module.');
+  }
+}
+
+/**
+ * Admin/Staff: Delete a School Module via authoritative Cloud Function.
+ */
+export async function deleteSchoolModule(moduleId: string): Promise<void> {
+  const callable = httpsCallable<
+    { moduleId: string },
+    { success: boolean; moduleId: string }
+  >(functionsInstance, 'deleteSchoolModule');
+
+  try {
+    await callable({ moduleId });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to delete school module.');
+  }
+}
+
+/* ==========================================================================
+   LESSONS API
+   ========================================================================== */
+
+/**
+ * List lessons belonging to a specific module.
+ */
+export async function listLessonsByModule(
+  moduleId: string,
+  includeUnpublished = false
+): Promise<SchoolLesson[]> {
+  try {
+    const q = query(
+      collection(db, LESSONS_COLLECTION),
+      where('moduleId', '==', moduleId),
+      orderBy('displayOrder', 'asc')
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const lessons = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<SchoolLesson, 'id'>),
+      }));
+      return includeUnpublished ? lessons : lessons.filter((l) => l.isPublished);
+    }
+    const seedLessons = SEED_LESSONS.filter((l) => l.moduleId === moduleId);
+    return includeUnpublished ? seedLessons : seedLessons.filter((l) => l.isPublished);
+  } catch (error) {
+    console.warn(`Could not load lessons for module ${moduleId}:`, error);
+    const seedLessons = SEED_LESSONS.filter((l) => l.moduleId === moduleId);
+    return includeUnpublished ? seedLessons : seedLessons.filter((l) => l.isPublished);
+  }
+}
+
+/**
+ * List all lessons belonging to a course.
+ */
+export async function listLessonsByCourse(
+  courseId: string,
+  includeUnpublished = false
+): Promise<SchoolLesson[]> {
+  try {
+    const q = query(
+      collection(db, LESSONS_COLLECTION),
+      where('courseId', '==', courseId),
+      orderBy('displayOrder', 'asc')
+    );
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const lessons = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<SchoolLesson, 'id'>),
+      }));
+      return includeUnpublished ? lessons : lessons.filter((l) => l.isPublished);
+    }
+    const seedLessons = SEED_LESSONS.filter((l) => l.courseId === courseId);
+    return includeUnpublished ? seedLessons : seedLessons.filter((l) => l.isPublished);
+  } catch (error) {
+    console.warn(`Could not load lessons for course ${courseId}:`, error);
+    const seedLessons = SEED_LESSONS.filter((l) => l.courseId === courseId);
+    return includeUnpublished ? seedLessons : seedLessons.filter((l) => l.isPublished);
+  }
+}
+
+/**
+ * Admin/Staff: Create a School Lesson via authoritative Cloud Function.
+ */
+export async function createSchoolLesson(
+  data: Omit<SchoolLesson, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> {
+  const callable = httpsCallable<
+    Omit<SchoolLesson, 'id' | 'createdAt' | 'updatedAt'>,
+    { success: boolean; id: string }
+  >(functionsInstance, 'createSchoolLesson');
+
+  try {
+    const res = await callable(data);
+    return res.data.id;
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to create school lesson.');
+  }
+}
+
+/**
+ * Admin/Staff: Update a School Lesson via authoritative Cloud Function.
+ */
+export async function updateSchoolLesson(
+  lessonId: string,
+  updates: Partial<SchoolLesson>
+): Promise<void> {
+  const callable = httpsCallable<
+    { lessonId: string; updates: Partial<SchoolLesson> },
+    { success: boolean; lessonId: string }
+  >(functionsInstance, 'updateSchoolLesson');
+
+  try {
+    await callable({ lessonId, updates });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to update school lesson.');
+  }
+}
+
+/**
+ * Admin/Staff: Delete a School Lesson via authoritative Cloud Function.
+ */
+export async function deleteSchoolLesson(lessonId: string): Promise<void> {
+  const callable = httpsCallable<
+    { lessonId: string },
+    { success: boolean; lessonId: string }
+  >(functionsInstance, 'deleteSchoolLesson');
+
+  try {
+    await callable({ lessonId });
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to delete school lesson.');
+  }
+}
+
+/* ==========================================================================
+   ENROLLMENT & PROGRESS API
+   ========================================================================== */
+
+/**
+ * Query Authoritative School Access Status from backend
+ */
+export async function queryAuthoritativeSchoolAccess(): Promise<{
+  hasAccess: boolean;
+  qualifyingContainerCount: number;
+  isStaff: boolean;
+  authenticated: boolean;
+}> {
+  const callable = httpsCallable<
+    unknown,
+    { hasAccess: boolean; qualifyingContainerCount: number; isStaff: boolean; authenticated: boolean }
+  >(functionsInstance, 'getSchoolAccessStatus');
+
+  try {
+    const res = await callable({});
+    return res.data;
+  } catch (err) {
+    console.warn('Could not query authoritative school access status:', err);
+    return { hasAccess: false, qualifyingContainerCount: 0, isStaff: false, authenticated: false };
+  }
+}
+
+/**
+ * Enroll user in a school course via authoritative Cloud Function.
+ */
+export async function enrollInCourse(courseId: string): Promise<{
+  success: boolean;
+  enrollmentId: string;
+  courseId: string;
+  isAlreadyEnrolled: boolean;
+  totalLessonsCount: number;
+}> {
+  const callable = httpsCallable<
+    { courseId: string },
+    { success: boolean; enrollmentId: string; courseId: string; isAlreadyEnrolled: boolean; totalLessonsCount: number }
+  >(functionsInstance, 'enrollInCourse');
+
+  try {
+    const res = await callable({ courseId });
+    return res.data;
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to enroll in course.');
+  }
+}
+
+/**
+ * Fetch a student's enrollment record for a specific course.
+ */
+export async function getUserEnrollment(
+  userId: string,
+  courseId: string
+): Promise<EnrollmentRecord | null> {
+  try {
+    const enrollmentRef = doc(db, ENROLLMENTS_COLLECTION, `${userId}_${courseId}`);
+    const snap = await getDoc(enrollmentRef);
+    if (!snap.exists()) return null;
+    return snap.data() as EnrollmentRecord;
+  } catch (error) {
+    console.warn('Error reading enrollment:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch all enrollment records for a student.
+ */
+export async function listUserEnrollments(userId: string): Promise<EnrollmentRecord[]> {
+  try {
+    const q = query(collection(db, ENROLLMENTS_COLLECTION), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as EnrollmentRecord);
+  } catch (error) {
+    console.warn('Error reading user enrollments:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetch a student's authoritative progress for a course.
+ */
+export async function getUserSchoolProgress(
+  userId: string,
+  courseId: string
+): Promise<SchoolProgress | null> {
+  try {
+    const progressRef = doc(db, PROGRESS_COLLECTION, `${userId}_${courseId}`);
+    const snap = await getDoc(progressRef);
+    if (!snap.exists()) return null;
+    return snap.data() as SchoolProgress;
+  } catch (error) {
+    console.warn('Error reading school progress:', error);
+    return null;
+  }
+}
+
+/**
+ * Mark a lesson as completed via authoritative Cloud Function.
+ * Returns updated progress calculation and completion status.
+ */
+export async function completeSchoolLesson(
+  courseId: string,
+  lessonId: string
+): Promise<{
+  success: boolean;
+  courseId: string;
+  lessonId: string;
+  progressPercent: number;
+  completedCount: number;
+  totalLessonsCount: number;
+  isCompleted: boolean;
+  completedAt: string | null;
+}> {
+  const callable = httpsCallable<
+    { courseId: string; lessonId: string },
+    {
+      success: boolean;
+      courseId: string;
+      lessonId: string;
+      progressPercent: number;
+      completedCount: number;
+      totalLessonsCount: number;
+      isCompleted: boolean;
+      completedAt: string | null;
+    }
+  >(functionsInstance, 'completeSchoolLesson');
+
+  try {
+    const res = await callable({ courseId, lessonId });
+    return res.data;
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to complete school lesson.');
+  }
+}
+
 

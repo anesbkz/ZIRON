@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.updateBatchStatus = exports.createProductBatch = exports.generateProductCodes = exports.activateContainerCode = exports.verifyContainerCode = exports.CROCKFORD_ALPHABET = exports.CANONICAL_CATALOG_SKUS = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = exports.FIRESTORE_DATABASE_ID = void 0;
+exports.completeSchoolLesson = exports.enrollInCourse = exports.deleteSchoolLesson = exports.updateSchoolLesson = exports.createSchoolLesson = exports.deleteSchoolModule = exports.updateSchoolModule = exports.createSchoolModule = exports.getSchoolAccessStatus = exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.updateBatchStatus = exports.createProductBatch = exports.generateProductCodes = exports.activateContainerCode = exports.verifyContainerCode = exports.CROCKFORD_ALPHABET = exports.CANONICAL_CATALOG_SKUS = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = exports.FIRESTORE_DATABASE_ID = void 0;
 exports.getBootstrapSuperAdminEmail = getBootstrapSuperAdminEmail;
 exports.isBootstrapModeAuthorized = isBootstrapModeAuthorized;
 exports.checkIsSuperAdmin = checkIsSuperAdmin;
@@ -8,6 +8,7 @@ exports.writeAuthoritativeAuditLog = writeAuthoritativeAuditLog;
 exports.normalizeProductCode = normalizeProductCode;
 exports.generateCrockfordSegment = generateCrockfordSegment;
 exports.generateSecureProductCode = generateSecureProductCode;
+exports.checkUserSchoolAccess = checkUserSchoolAccess;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
@@ -328,8 +329,12 @@ async function assertCanManageCodes(context) {
  */
 exports.verifyContainerCode = functions.https.onCall(async (data) => {
     const rawCode = (data?.code || '').trim().toUpperCase();
-    if (!rawCode) {
-        throw new functions.https.HttpsError('invalid-argument', 'Product verification code is required.');
+    if (!rawCode || rawCode.length < 5 || rawCode.length > 64 || !/^[A-Z0-9-]+$/.test(rawCode)) {
+        return {
+            isValid: false,
+            isAuthentic: false,
+            message: 'Invalid or malformed product verification code format.',
+        };
     }
     // Pre-locate product code document reference (supports direct docId, code field, or normalized code)
     const codeDocRef = db.collection('productCodes').doc(rawCode);
@@ -1968,5 +1973,653 @@ exports.deleteCommunityAnnouncement = functions.https.onCall(async (data, contex
     });
     await batch.commit();
     return { success: true, announcementId };
+});
+/* ==========================================================================
+   SCHOOL LMS CLOUD FUNCTIONS (MODULES, LESSONS, ENROLLMENT, PROGRESS)
+   ========================================================================== */
+/**
+ * Authoritative School Access Helper:
+ * Determines if user qualifies for ZIRON School curriculum.
+ * School access requires 3 UNIQUE ACTIVATED PRODUCT CONTAINERS, or an active SCHOOL_ACCESS entitlement,
+ * or staff permissions (SUPER_ADMIN, ADMIN, SCHOOL_MANAGER).
+ */
+async function checkUserSchoolAccess(uid, roles = [], email = '', isEmailVerified = false) {
+    const isSuperAdmin = await checkIsSuperAdmin(uid, roles, email, isEmailVerified);
+    const isStaffMember = isSuperAdmin || roles.includes('ADMIN') || roles.includes('SCHOOL_MANAGER');
+    if (isStaffMember) {
+        return { hasAccess: true, qualifyingContainerCount: 3, isStaff: true };
+    }
+    // Check earned entitlement
+    const schoolEntDocRef = db.collection('entitlements').doc(`${uid}_SCHOOL_ACCESS`);
+    const schoolEntSnap = await schoolEntDocRef.get();
+    if (schoolEntSnap.exists && schoolEntSnap.data()?.status === 'ACTIVE') {
+        return { hasAccess: true, qualifyingContainerCount: 3, isStaff: false };
+    }
+    // Count distinct activated container codes
+    const activationsSnap = await db.collection('activations').where('userId', '==', uid).get();
+    const distinctContainerCodes = new Set();
+    activationsSnap.docs.forEach((d) => {
+        const codeVal = (d.data().code || '').trim().toUpperCase();
+        if (codeVal) {
+            distinctContainerCodes.add(codeVal);
+        }
+    });
+    const qualifyingContainerCount = distinctContainerCodes.size;
+    const hasAccess = qualifyingContainerCount >= 3;
+    return { hasAccess, qualifyingContainerCount, isStaff: false };
+}
+/**
+ * Callable Function: Query Authoritative School Access Status
+ */
+exports.getSchoolAccessStatus = functions.https.onCall(async (_data, context) => {
+    if (!context.auth) {
+        return { hasAccess: false, qualifyingContainerCount: 0, isStaff: false, authenticated: false };
+    }
+    const callerUid = context.auth.uid;
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const userSnap = await db.collection('users').doc(callerUid).get();
+    const userData = userSnap.exists ? userSnap.data() : null;
+    const roles = userData?.roles || [];
+    const status = await checkUserSchoolAccess(callerUid, roles, callerEmail, isEmailVerified);
+    return { ...status, authenticated: true };
+});
+/**
+ * Callable Function: Authoritative School Module Creation
+ */
+exports.createSchoolModule = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    if (callerData.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+    }
+    const callerRoles = callerData.roles || [];
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isCallerSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Caller lacks authority to create school modules.');
+    }
+    const { courseId, title, description = {}, displayOrder = 0, isPublished = false } = data;
+    if (!courseId || !title || !title.en) {
+        throw new functions.https.HttpsError('invalid-argument', 'Module requires courseId and title.en.');
+    }
+    const courseSnap = await db.collection('schoolCourses').doc(courseId).get();
+    if (!courseSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Course "${courseId}" not found.`);
+    }
+    const now = new Date().toISOString();
+    const moduleRef = db.collection('schoolModules').doc();
+    const moduleDoc = {
+        id: moduleRef.id,
+        courseId,
+        title,
+        description: typeof description === 'object' ? description : {},
+        displayOrder: Number(displayOrder) || 0,
+        isPublished: Boolean(isPublished),
+        createdAt: now,
+        updatedAt: now,
+    };
+    const batch = db.batch();
+    batch.set(moduleRef, moduleDoc);
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'SCHOOL_MODULE_CREATED',
+        resourceType: 'schoolModules',
+        resourceId: moduleRef.id,
+        timestamp: now,
+        metadata: { courseId, title: title.en, enforcedBy: 'SERVER_AUTHORITY' },
+    });
+    await batch.commit();
+    return { success: true, id: moduleRef.id };
+});
+/**
+ * Callable Function: Authoritative School Module Update
+ */
+exports.updateSchoolModule = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    if (callerData.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+    }
+    const callerRoles = callerData.roles || [];
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isCallerSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Caller lacks authority to update school modules.');
+    }
+    const { moduleId, updates } = data;
+    if (!moduleId || !updates || typeof updates !== 'object') {
+        throw new functions.https.HttpsError('invalid-argument', 'Valid moduleId and updates object are required.');
+    }
+    const moduleRef = db.collection('schoolModules').doc(moduleId);
+    const moduleSnap = await moduleRef.get();
+    if (!moduleSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Module "${moduleId}" not found.`);
+    }
+    const allowedFields = ['title', 'description', 'displayOrder', 'isPublished'];
+    const sanitizedUpdates = { updatedAt: new Date().toISOString() };
+    for (const field of allowedFields) {
+        if (field in updates) {
+            sanitizedUpdates[field] = updates[field];
+        }
+    }
+    const batch = db.batch();
+    batch.update(moduleRef, sanitizedUpdates);
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'SCHOOL_MODULE_UPDATED',
+        resourceType: 'schoolModules',
+        resourceId: moduleId,
+        timestamp: new Date().toISOString(),
+        metadata: { updatedFields: Object.keys(sanitizedUpdates), enforcedBy: 'SERVER_AUTHORITY' },
+    });
+    await batch.commit();
+    return { success: true, moduleId };
+});
+/**
+ * Callable Function: Authoritative School Module Deletion
+ */
+exports.deleteSchoolModule = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    if (callerData.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+    }
+    const callerRoles = callerData.roles || [];
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isCallerSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Caller lacks authority to delete school modules.');
+    }
+    const { moduleId } = data;
+    if (!moduleId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Valid moduleId is required.');
+    }
+    const moduleRef = db.collection('schoolModules').doc(moduleId);
+    const moduleSnap = await moduleRef.get();
+    if (!moduleSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Module "${moduleId}" not found.`);
+    }
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    batch.delete(moduleRef);
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'SCHOOL_MODULE_DELETED',
+        resourceType: 'schoolModules',
+        resourceId: moduleId,
+        timestamp: now,
+        metadata: { courseId: moduleSnap.data()?.courseId, enforcedBy: 'SERVER_AUTHORITY' },
+    });
+    await batch.commit();
+    return { success: true, moduleId };
+});
+/**
+ * Callable Function: Authoritative School Lesson Creation
+ */
+exports.createSchoolLesson = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    if (callerData.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+    }
+    const callerRoles = callerData.roles || [];
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isCallerSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Caller lacks authority to create school lessons.');
+    }
+    const { courseId, moduleId, title, contentMarkdown = { en: '' }, durationMinutes = 15, displayOrder = 0, isPublished = false, } = data;
+    if (!courseId || !moduleId || !title || !title.en) {
+        throw new functions.https.HttpsError('invalid-argument', 'Lesson requires courseId, moduleId, and title.en.');
+    }
+    const courseRef = db.collection('schoolCourses').doc(courseId);
+    const courseSnap = await courseRef.get();
+    if (!courseSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Course "${courseId}" not found.`);
+    }
+    const moduleSnap = await db.collection('schoolModules').doc(moduleId).get();
+    if (!moduleSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Module "${moduleId}" not found.`);
+    }
+    const now = new Date().toISOString();
+    const lessonRef = db.collection('schoolLessons').doc();
+    const lessonDoc = {
+        id: lessonRef.id,
+        courseId,
+        moduleId,
+        title,
+        contentMarkdown: typeof contentMarkdown === 'object' ? contentMarkdown : { en: String(contentMarkdown) },
+        durationMinutes: Number(durationMinutes) || 15,
+        displayOrder: Number(displayOrder) || 0,
+        isPublished: Boolean(isPublished),
+        createdAt: now,
+        updatedAt: now,
+    };
+    const batch = db.batch();
+    batch.set(lessonRef, lessonDoc);
+    // Increment course lessonsCount
+    const currentLessonsCount = Number(courseSnap.data()?.lessonsCount) || 0;
+    batch.update(courseRef, {
+        lessonsCount: currentLessonsCount + 1,
+        updatedAt: now,
+    });
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'SCHOOL_LESSON_CREATED',
+        resourceType: 'schoolLessons',
+        resourceId: lessonRef.id,
+        timestamp: now,
+        metadata: { courseId, moduleId, title: title.en, enforcedBy: 'SERVER_AUTHORITY' },
+    });
+    await batch.commit();
+    return { success: true, id: lessonRef.id };
+});
+/**
+ * Callable Function: Authoritative School Lesson Update
+ */
+exports.updateSchoolLesson = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    if (callerData.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+    }
+    const callerRoles = callerData.roles || [];
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isCallerSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Caller lacks authority to update school lessons.');
+    }
+    const { lessonId, updates } = data;
+    if (!lessonId || !updates || typeof updates !== 'object') {
+        throw new functions.https.HttpsError('invalid-argument', 'Valid lessonId and updates object are required.');
+    }
+    const lessonRef = db.collection('schoolLessons').doc(lessonId);
+    const lessonSnap = await lessonRef.get();
+    if (!lessonSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Lesson "${lessonId}" not found.`);
+    }
+    const allowedFields = ['title', 'contentMarkdown', 'durationMinutes', 'displayOrder', 'isPublished', 'moduleId'];
+    const sanitizedUpdates = { updatedAt: new Date().toISOString() };
+    for (const field of allowedFields) {
+        if (field in updates) {
+            sanitizedUpdates[field] = updates[field];
+        }
+    }
+    const batch = db.batch();
+    batch.update(lessonRef, sanitizedUpdates);
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'SCHOOL_LESSON_UPDATED',
+        resourceType: 'schoolLessons',
+        resourceId: lessonId,
+        timestamp: new Date().toISOString(),
+        metadata: { updatedFields: Object.keys(sanitizedUpdates), enforcedBy: 'SERVER_AUTHORITY' },
+    });
+    await batch.commit();
+    return { success: true, lessonId };
+});
+/**
+ * Callable Function: Authoritative School Lesson Deletion
+ */
+exports.deleteSchoolLesson = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    if (callerData.status !== 'active') {
+        throw new functions.https.HttpsError('permission-denied', 'Caller account is not active.');
+    }
+    const callerRoles = callerData.roles || [];
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const isCallerSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isCallerSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Caller lacks authority to delete school lessons.');
+    }
+    const { lessonId } = data;
+    if (!lessonId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Valid lessonId is required.');
+    }
+    const lessonRef = db.collection('schoolLessons').doc(lessonId);
+    const lessonSnap = await lessonRef.get();
+    if (!lessonSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Lesson "${lessonId}" not found.`);
+    }
+    const lessonData = lessonSnap.data();
+    const courseId = lessonData.courseId;
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    batch.delete(lessonRef);
+    if (courseId) {
+        const courseRef = db.collection('schoolCourses').doc(courseId);
+        const courseSnap = await courseRef.get();
+        if (courseSnap.exists) {
+            const currentLessonsCount = Math.max(0, (Number(courseSnap.data()?.lessonsCount) || 1) - 1);
+            batch.update(courseRef, { lessonsCount: currentLessonsCount, updatedAt: now });
+        }
+    }
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'SCHOOL_LESSON_DELETED',
+        resourceType: 'schoolLessons',
+        resourceId: lessonId,
+        timestamp: now,
+        metadata: { courseId, enforcedBy: 'SERVER_AUTHORITY' },
+    });
+    await batch.commit();
+    return { success: true, lessonId };
+});
+/**
+ * Callable Function: Authoritative Course Enrollment
+ * Validates School access entitlement before enrolling student.
+ */
+exports.enrollInCourse = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated to enroll.');
+    }
+    const callerUid = context.auth.uid;
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const userSnap = await db.collection('users').doc(callerUid).get();
+    if (!userSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'User profile not found.');
+    }
+    const userData = userSnap.data();
+    const roles = userData.roles || [];
+    // Authoritative entitlement check
+    const access = await checkUserSchoolAccess(callerUid, roles, callerEmail, isEmailVerified);
+    if (!access.hasAccess) {
+        throw new functions.https.HttpsError('permission-denied', 'School curriculum access requires 3 verified product container activations.');
+    }
+    const { courseId } = data;
+    if (!courseId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Valid courseId is required.');
+    }
+    const courseRef = db.collection('schoolCourses').doc(courseId);
+    const courseSnap = await courseRef.get();
+    if (!courseSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Course "${courseId}" not found.`);
+    }
+    const courseData = courseSnap.data();
+    if (!courseData.isPublished && !access.isStaff) {
+        throw new functions.https.HttpsError('permission-denied', 'This course is currently not published.');
+    }
+    const enrollmentId = `${callerUid}_${courseId}`;
+    const enrollmentRef = db.collection('enrollments').doc(enrollmentId);
+    const progressRef = db.collection('schoolProgress').doc(enrollmentId);
+    const [enrollmentSnap, progressSnap] = await Promise.all([enrollmentRef.get(), progressRef.get()]);
+    const now = new Date().toISOString();
+    // Query published lessons to know totalLessonsCount
+    const lessonsSnap = await db
+        .collection('schoolLessons')
+        .where('courseId', '==', courseId)
+        .where('isPublished', '==', true)
+        .get();
+    const totalLessonsCount = lessonsSnap.size;
+    const batch = db.batch();
+    if (!enrollmentSnap.exists) {
+        batch.set(enrollmentRef, {
+            id: enrollmentId,
+            userId: callerUid,
+            courseId,
+            enrolledAt: now,
+            status: 'ACTIVE',
+            lastAccessedAt: now,
+            completedAt: null,
+        });
+    }
+    else {
+        batch.update(enrollmentRef, {
+            lastAccessedAt: now,
+        });
+    }
+    if (!progressSnap.exists) {
+        batch.set(progressRef, {
+            id: enrollmentId,
+            userId: callerUid,
+            courseId,
+            completedLessonIds: [],
+            completedCount: 0,
+            totalLessonsCount,
+            progressPercent: 0,
+            isCompleted: false,
+            completedAt: null,
+            lastUpdated: now,
+        });
+    }
+    else {
+        batch.update(progressRef, {
+            totalLessonsCount,
+            lastUpdated: now,
+        });
+    }
+    await batch.commit();
+    return {
+        success: true,
+        enrollmentId,
+        courseId,
+        isAlreadyEnrolled: enrollmentSnap.exists,
+        totalLessonsCount,
+    };
+});
+/**
+ * Callable Function: Authoritative Lesson Completion and Progress Calculation
+ * Calculates deterministic completion percent and marks completion upon 100% finish.
+ */
+exports.completeSchoolLesson = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Caller must be authenticated.');
+    }
+    const callerUid = context.auth.uid;
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const userSnap = await db.collection('users').doc(callerUid).get();
+    if (!userSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'User profile not found.');
+    }
+    const userData = userSnap.data();
+    const roles = userData.roles || [];
+    // Authoritative entitlement check
+    const access = await checkUserSchoolAccess(callerUid, roles, callerEmail, isEmailVerified);
+    if (!access.hasAccess) {
+        throw new functions.https.HttpsError('permission-denied', 'School curriculum access requires 3 verified product container activations.');
+    }
+    const { courseId, lessonId } = data;
+    if (!courseId || !lessonId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Both courseId and lessonId are required.');
+    }
+    const lessonRef = db.collection('schoolLessons').doc(lessonId);
+    const lessonSnap = await lessonRef.get();
+    if (!lessonSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Lesson "${lessonId}" not found.`);
+    }
+    const lessonData = lessonSnap.data();
+    if (lessonData.courseId !== courseId) {
+        throw new functions.https.HttpsError('invalid-argument', 'Lesson does not belong to specified course.');
+    }
+    // Authoritatively query all published lessons for this course to calculate real progress
+    const publishedLessonsSnap = await db
+        .collection('schoolLessons')
+        .where('courseId', '==', courseId)
+        .where('isPublished', '==', true)
+        .get();
+    const totalLessonsCount = publishedLessonsSnap.size;
+    const publishedLessonIds = new Set(publishedLessonsSnap.docs.map((d) => d.id));
+    // Ensure current lesson is accounted for even if just published
+    publishedLessonIds.add(lessonId);
+    const effectiveTotalLessons = Math.max(totalLessonsCount, publishedLessonIds.size);
+    const progressId = `${callerUid}_${courseId}`;
+    const progressRef = db.collection('schoolProgress').doc(progressId);
+    const enrollmentRef = db.collection('enrollments').doc(progressId);
+    const [progressSnap, enrollmentSnap] = await Promise.all([progressRef.get(), enrollmentRef.get()]);
+    const existingCompletedIds = progressSnap.exists
+        ? progressSnap.data()?.completedLessonIds || []
+        : [];
+    const completedSet = new Set(existingCompletedIds);
+    completedSet.add(lessonId);
+    const updatedCompletedIds = Array.from(completedSet);
+    const completedCount = updatedCompletedIds.length;
+    const progressPercent = effectiveTotalLessons > 0
+        ? Math.min(100, Math.round((completedCount / effectiveTotalLessons) * 100))
+        : 100;
+    const isCompleted = progressPercent >= 100;
+    const now = new Date().toISOString();
+    const batch = db.batch();
+    // Progress update
+    const progressDoc = {
+        id: progressId,
+        userId: callerUid,
+        courseId,
+        completedLessonIds: updatedCompletedIds,
+        completedCount,
+        totalLessonsCount: effectiveTotalLessons,
+        progressPercent,
+        isCompleted,
+        completedAt: isCompleted ? (progressSnap.data()?.completedAt || now) : null,
+        lastAccessedLessonId: lessonId,
+        lastUpdated: now,
+    };
+    batch.set(progressRef, progressDoc, { merge: true });
+    // Enrollment update
+    if (!enrollmentSnap.exists) {
+        batch.set(enrollmentRef, {
+            id: progressId,
+            userId: callerUid,
+            courseId,
+            enrolledAt: now,
+            status: isCompleted ? 'COMPLETED' : 'ACTIVE',
+            lastAccessedLessonId: lessonId,
+            lastAccessedAt: now,
+            completedAt: isCompleted ? now : null,
+        });
+    }
+    else {
+        batch.update(enrollmentRef, {
+            status: isCompleted ? 'COMPLETED' : enrollmentSnap.data()?.status || 'ACTIVE',
+            lastAccessedLessonId: lessonId,
+            lastAccessedAt: now,
+            completedAt: isCompleted ? (enrollmentSnap.data()?.completedAt || now) : null,
+        });
+    }
+    // Audit log
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: roles,
+        action: isCompleted ? 'SCHOOL_COURSE_COMPLETED' : 'SCHOOL_LESSON_COMPLETED',
+        resourceType: 'schoolProgress',
+        resourceId: progressId,
+        timestamp: now,
+        metadata: {
+            courseId,
+            lessonId,
+            progressPercent,
+            completedCount,
+            effectiveTotalLessons,
+            isCompleted,
+            enforcedBy: 'SERVER_AUTHORITY',
+        },
+    });
+    await batch.commit();
+    return {
+        success: true,
+        courseId,
+        lessonId,
+        progressPercent,
+        completedCount,
+        totalLessonsCount: effectiveTotalLessons,
+        isCompleted,
+        completedAt: progressDoc.completedAt,
+    };
 });
 //# sourceMappingURL=index.js.map

@@ -10,6 +10,7 @@ import { Button } from '@/components/design-system/Button';
 import { GridPattern } from '@/components/design-system/GridPattern';
 import { useCustomerEntitlements } from '@/hooks/useCustomerEntitlements';
 import { getAppTranslations } from '@/lib/i18n/appTranslations';
+import { CoursePlayer } from '@/components/school/CoursePlayer';
 import {
   GraduationCap,
   Lock,
@@ -33,6 +34,7 @@ export const AppSchoolPage: React.FC = () => {
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<SchoolCategory | null>(null);
   const [courses, setCourses] = useState<SchoolCourse[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<SchoolCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(false);
 
@@ -232,6 +234,19 @@ export const AppSchoolPage: React.FC = () => {
   }
 
   // Unlocked State: Full Curriculum Academy
+  if (selectedCourse) {
+    return (
+      <div className="py-10 bg-[#F5F7FA]" dir={dir}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <CoursePlayer
+            course={selectedCourse}
+            onBack={() => setSelectedCourse(null)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="py-10 bg-[#F5F7FA]" dir={dir}>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
@@ -321,10 +336,11 @@ export const AppSchoolPage: React.FC = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {courses.map((course) => {
+                  const diffLower = course.difficulty?.toLowerCase();
                   const difficultyLabel =
-                    course.difficulty === 'beginner'
+                    diffLower === 'beginner' || diffLower === 'foundational'
                       ? t.school.difficultyBeginner
-                      : course.difficulty === 'advanced'
+                      : diffLower === 'advanced'
                       ? t.school.difficultyAdvanced
                       : t.school.difficultyIntermediate;
 
@@ -350,7 +366,12 @@ export const AppSchoolPage: React.FC = () => {
                           {course.description[locale] || course.description.en}
                         </p>
                       </div>
-                      <Button variant="outline" size="sm" className="w-full cursor-pointer">
+                      <Button
+                        onClick={() => setSelectedCourse(course)}
+                        variant="outline"
+                        size="sm"
+                        className="w-full cursor-pointer hover:bg-[#0B2346] hover:text-white hover:border-[#0B2346] transition-colors"
+                      >
                         {t.school.viewCurriculumBtn}
                       </Button>
                     </div>

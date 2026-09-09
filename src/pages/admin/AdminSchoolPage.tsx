@@ -9,10 +9,13 @@ import {
 import { Button } from '@/components/design-system/Button';
 import { Input } from '@/components/design-system/Input';
 import { Card } from '@/components/design-system/Card';
-import { Plus, Check, Eye, EyeOff, GraduationCap, Loader2 } from 'lucide-react';
+import { AdminCoursesManager } from '@/components/admin/AdminCoursesManager';
+import { AdminCurriculumManager } from '@/components/admin/AdminCurriculumManager';
+import { Plus, Check, Eye, EyeOff, GraduationCap, Loader2, BookOpen, Layers } from 'lucide-react';
 
 export const AdminSchoolPage: React.FC = () => {
   const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState<'categories' | 'courses' | 'curriculum'>('categories');
   const [categories, setCategories] = useState<SchoolCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -105,31 +108,75 @@ export const AdminSchoolPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-[#E2E8F0] p-6">
-        <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider mb-2">
-            <GraduationCap className="w-3.5 h-3.5" />
-            FIRESTORE-DRIVEN CMS
-          </div>
-          <h1 className="text-xl font-black text-[#0B2346]">
-            ZIRON School Categories
-          </h1>
-          <p className="text-xs text-gray-600 mt-0.5">
-            Add, publish, and reorder curriculum categories without redeploying code.
-          </p>
-        </div>
-
-        <Button
-          onClick={() => setShowCreateModal(true)}
-          variant="primary"
-          size="sm"
-          className="flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+      {/* Admin LMS Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-[#E2E8F0] pb-2">
+        <button
+          onClick={() => setActiveTab('categories')}
+          className={`px-4 py-2 text-xs font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'categories'
+              ? 'bg-[#0B2346] text-white border-[#0B2346]'
+              : 'bg-white text-gray-600 border-[#E2E8F0] hover:bg-gray-50'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          <span>New Category</span>
-        </Button>
+          <GraduationCap className="w-3.5 h-3.5" />
+          <span>Categories</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('courses')}
+          className={`px-4 py-2 text-xs font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'courses'
+              ? 'bg-[#0B2346] text-white border-[#0B2346]'
+              : 'bg-white text-gray-600 border-[#E2E8F0] hover:bg-gray-50'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>Courses</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('curriculum')}
+          className={`px-4 py-2 text-xs font-bold border transition-colors cursor-pointer flex items-center gap-1.5 ${
+            activeTab === 'curriculum'
+              ? 'bg-[#0B2346] text-white border-[#0B2346]'
+              : 'bg-white text-gray-600 border-[#E2E8F0] hover:bg-gray-50'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Modules & Lessons</span>
+        </button>
       </div>
+
+      {activeTab === 'courses' && <AdminCoursesManager />}
+      {activeTab === 'curriculum' && <AdminCurriculumManager />}
+
+      {activeTab === 'categories' && (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-[#E2E8F0] p-6">
+            <div>
+              <div className="inline-flex items-center gap-2 px-2.5 py-0.5 bg-blue-50 text-[#0B2346] font-mono text-[10px] uppercase font-bold tracking-wider mb-2">
+                <GraduationCap className="w-3.5 h-3.5" />
+                FIRESTORE-DRIVEN CMS
+              </div>
+              <h1 className="text-xl font-black text-[#0B2346]">
+                ZIRON School Categories
+              </h1>
+              <p className="text-xs text-gray-600 mt-0.5">
+                Add, publish, and reorder curriculum categories without redeploying code.
+              </p>
+            </div>
+
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              variant="primary"
+              size="sm"
+              className="flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Category</span>
+            </Button>
+          </div>
 
       {/* Categories List */}
       {loading ? (
@@ -311,6 +358,8 @@ export const AdminSchoolPage: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
         </div>
       )}
     </div>
