@@ -24,6 +24,9 @@ import {
   Compass,
   Calendar,
   Loader2,
+  Award,
+  Flame,
+  Gift,
 } from 'lucide-react';
 import { calculateProfileCompleteness } from '@/lib/validation/profileValidation';
 
@@ -233,6 +236,54 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Section B.2: Gamification & Rewards Motivation Dossier */}
+        <div className="bg-white border border-[#E2E8F0] p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-amber-50 border border-amber-200 text-[#F28C28] flex items-center justify-center font-bold">
+                <Gift className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase text-gray-500 font-bold tracking-wider">
+                  {locale === 'ar' ? 'رصيد ومستوى المشارك' : locale === 'fr' ? 'Niveau & Points' : 'Level & Experience'}
+                </div>
+                <div className="text-sm font-bold text-[#0B2346] flex items-center gap-2">
+                  <span>
+                    {locale === 'ar' ? 'المستوى' : locale === 'fr' ? 'Niveau' : 'Level'} {profile?.level ?? 1}
+                  </span>
+                  <span className="text-gray-300">•</span>
+                  <span className="text-[#F28C28] font-mono">{profile?.xp ?? 0} XP</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden sm:block h-8 w-px bg-gray-200" />
+
+            <div className="flex items-center gap-2 text-xs">
+              <Flame className="w-4 h-4 text-orange-500" />
+              <span className="text-gray-600">
+                {locale === 'ar' ? 'التتابع النشط:' : locale === 'fr' ? 'Série active :' : 'Active Streak:'}
+              </span>
+              <span className="font-mono font-bold text-orange-600">
+                {profile?.currentStreak ?? 0} {locale === 'ar' ? 'أيام' : locale === 'fr' ? 'jours' : 'days'}
+              </span>
+            </div>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            <Button
+              onClick={() => navigate('app/rewards')}
+              variant="outline"
+              size="sm"
+              className="cursor-pointer inline-flex items-center gap-1.5"
+            >
+              <Award className="w-3.5 h-3.5 text-[#0B2346]" />
+              <span>{locale === 'ar' ? 'متجر المكافآت والأوسمة' : locale === 'fr' ? 'Récompenses & Badges' : 'Rewards & Badges'}</span>
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
 
         {/* Section C & D & E: Core Ecosystem Features */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

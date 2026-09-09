@@ -202,6 +202,9 @@ service cloud.firestore {
           'qualifyingContainerCount',
           'xp',
           'level',
+          'currentStreak',
+          'longestStreak',
+          'lastActivityDate',
           'emailVerified',
           'phoneVerified',
           'createdAt',
@@ -433,6 +436,52 @@ service cloud.firestore {
     match /cmsContent/{sectionKey} {
       allow get, list: if true;
       allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // GAMIFICATION: XP LEDGER, MILESTONES, BADGES, STREAKS, REWARDS & REDEMPTIONS
+    // All write operations are strictly server-authoritative via Cloud Functions.
+    // Customers cannot directly modify XP, levels, milestones, badges, streaks, or redemptions.
+    // =========================================================================
+    match /xpTransactions/{txId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn();
+      allow write: if false; // Cloud Functions only
+    }
+
+    match /userMilestones/{milestoneId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn();
+      allow write: if false; // Cloud Functions only
+    }
+
+    match /userBadges/{badgeId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn();
+      allow write: if false; // Cloud Functions only
+    }
+
+    match /userGamification/{userId} {
+      allow get: if isOwner(userId) || isStaff();
+      allow list: if isStaff();
+      allow write: if false; // Cloud Functions only
+    }
+
+    match /rewards/{rewardId} {
+      allow get, list: if isSignedIn();
+      allow write: if hasStaffRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    match /rewardRedemptions/{redemptionId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn();
+      allow write: if false; // redeemReward Cloud Function only
+    }
+
+    match /journeyLogs/{logId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn();
+      allow write: if false; // completeJourneyDay Cloud Function only
     }
 
     // =========================================================================

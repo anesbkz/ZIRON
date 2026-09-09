@@ -310,6 +310,84 @@
         "completedAt": { "type": "string" }
       },
       "required": ["userId", "courseId", "enrolledAt", "status"]
+    },
+    "XpTransaction": {
+      "title": "XpTransaction",
+      "description": "Immutable ledger record of earned, redeemed, or adjusted XP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["EARNED", "REDEEMED", "ADJUSTMENT"] },
+        "source": { "type": "string" },
+        "sourceId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "userId", "amount", "type", "source", "createdAt"]
+    },
+    "UserMilestone": {
+      "title": "UserMilestone",
+      "description": "Major platform achievement reached by user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "milestoneKey": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "achievedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "milestoneKey", "title", "achievedAt"]
+    },
+    "UserBadge": {
+      "title": "UserBadge",
+      "description": "Earned credential badge symbolizing verifiable platform accomplishments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "badgeKey": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" },
+        "requirement": { "type": "string" },
+        "awardedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "badgeKey", "name", "awardedAt"]
+    },
+    "Reward": {
+      "title": "Reward",
+      "description": "Available catalog reward redeemable via authoritative XP deduction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["DIGITAL", "PLATFORM_BENEFIT", "BADGE", "EDUCATIONAL"] },
+        "xpCost": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "stock": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "title", "type", "xpCost", "isActive"]
+    },
+    "RewardRedemption": {
+      "title": "RewardRedemption",
+      "description": "Authoritative redemption audit record for claimed reward",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "rewardId": { "type": "string" },
+        "rewardTitle": { "type": "string" },
+        "xpCost": { "type": "number" },
+        "status": { "type": "string", "enum": ["COMPLETED", "PENDING", "REJECTED"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "rewardId", "rewardTitle", "xpCost", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -384,6 +462,26 @@
     "/cmsContent/{sectionKey}": {
       "schema": { "$ref": "#/entities/CmsContent" },
       "description": "Live CMS content manageable without application redeployment"
+    },
+    "/xpTransactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/XpTransaction" },
+      "description": "Immutable append-only XP event ledger"
+    },
+    "/userMilestones/{milestoneId}": {
+      "schema": { "$ref": "#/entities/UserMilestone" },
+      "description": "Deterministic user achievement milestones"
+    },
+    "/userBadges/{badgeId}": {
+      "schema": { "$ref": "#/entities/UserBadge" },
+      "description": "Earned platform badges and credentials"
+    },
+    "/rewards/{rewardId}": {
+      "schema": { "$ref": "#/entities/Reward" },
+      "description": "Available rewards marketplace catalogue"
+    },
+    "/rewardRedemptions/{redemptionId}": {
+      "schema": { "$ref": "#/entities/RewardRedemption" },
+      "description": "Authoritative user reward redemptions"
     }
   }
 }

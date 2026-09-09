@@ -2,6 +2,17 @@ import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
+import {
+  XP_VALUES,
+  calculateLevel,
+  calculateStreakUpdate,
+  MILESTONES,
+  BADGES,
+  INITIAL_REWARDS,
+  MilestoneKey,
+  BadgeKey,
+  XpEventType,
+} from './gamification';
 
 admin.initializeApp();
 
@@ -636,13 +647,21 @@ export const activateContainerCode = functions.https.onCall(async (data, context
     const userSnap = await transaction.get(userDocRef);
     const userData = userSnap.exists ? userSnap.data() : null;
     const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
-    const awardedXp = 50;
+    const awardedXp = XP_VALUES.PRODUCT_ACTIVATED; // 50 XP
     const totalXp = currentXp + awardedXp;
-    const level = Math.floor(totalXp / 100) + 1;
+    const levelProgress = calculateLevel(totalXp);
+    const level = levelProgress.currentLevel;
 
     const now = new Date().toISOString();
+    const today = now.slice(0, 10);
     const productSku = codeData.productSku || 'VIR-CONTAINER-DEFAULT';
     const activationDocRef = db.collection('activations').doc();
+
+    // Streak calculation
+    const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+    const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+    const lastActivityDate = userData?.lastActivityDate || null;
+    const streakUpdate = calculateStreakUpdate(currentStreak, longestStreak, lastActivityDate, today);
 
     // 1. Mark code as activated (permanently bound to callerUid)
     transaction.update(codeDocRef, {
@@ -718,17 +737,136 @@ export const activateContainerCode = functions.https.onCall(async (data, context
       }, { merge: true });
     }
 
-    // 6. Update user profile quick access flags and reward/XP state
+    // 6. Record immutable XP ledger transaction
+    const xpTxRef = db.collection('xpTransactions').doc(`xp_act_${activationDocRef.id}`);
+    transaction.set(xpTxRef, {
+      id: xpTxRef.id,
+      userId: callerUid,
+      amount: awardedXp,
+      type: 'EARNED',
+      source: 'PRODUCT_ACTIVATED',
+      sourceId: activationDocRef.id,
+      createdAt: now,
+      metadata: {
+        code: codeData.code || rawCode,
+        productSku,
+        qualifyingContainerCount,
+      },
+    });
+
+    // 7. Deterministic Milestones & Badges
+    const milestoneFirstProdRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_PRODUCT`);
+    transaction.set(milestoneFirstProdRef, {
+      id: `${callerUid}_FIRST_PRODUCT`,
+      userId: callerUid,
+      milestoneKey: 'FIRST_PRODUCT',
+      title: MILESTONES.FIRST_PRODUCT.title,
+      description: MILESTONES.FIRST_PRODUCT.description,
+      achievedAt: now,
+    }, { merge: true });
+
+    const badgeFirstStepRef = db.collection('userBadges').doc(`${callerUid}_FIRST_STEP`);
+    transaction.set(badgeFirstStepRef, {
+      id: `${callerUid}_FIRST_STEP`,
+      userId: callerUid,
+      badgeKey: 'FIRST_STEP',
+      name: BADGES.FIRST_STEP.name,
+      description: BADGES.FIRST_STEP.description,
+      icon: BADGES.FIRST_STEP.icon,
+      requirement: BADGES.FIRST_STEP.requirement,
+      awardedAt: now,
+    }, { merge: true });
+
+    if (qualifyingContainerCount >= 3) {
+      const milestoneThreeRef = db.collection('userMilestones').doc(`${callerUid}_THREE_PRODUCTS`);
+      transaction.set(milestoneThreeRef, {
+        id: `${callerUid}_THREE_PRODUCTS`,
+        userId: callerUid,
+        milestoneKey: 'THREE_PRODUCTS',
+        title: MILESTONES.THREE_PRODUCTS.title,
+        description: MILESTONES.THREE_PRODUCTS.description,
+        achievedAt: now,
+      }, { merge: true });
+    }
+
+    if (qualifiesForSchool) {
+      const milestoneSchoolRef = db.collection('userMilestones').doc(`${callerUid}_SCHOOL_UNLOCKED`);
+      transaction.set(milestoneSchoolRef, {
+        id: `${callerUid}_SCHOOL_UNLOCKED`,
+        userId: callerUid,
+        milestoneKey: 'SCHOOL_UNLOCKED',
+        title: MILESTONES.SCHOOL_UNLOCKED.title,
+        description: MILESTONES.SCHOOL_UNLOCKED.description,
+        achievedAt: now,
+      }, { merge: true });
+
+      const badgeSchoolRef = db.collection('userBadges').doc(`${callerUid}_SCHOOL_READY`);
+      transaction.set(badgeSchoolRef, {
+        id: `${callerUid}_SCHOOL_READY`,
+        userId: callerUid,
+        badgeKey: 'SCHOOL_READY',
+        name: BADGES.SCHOOL_READY.name,
+        description: BADGES.SCHOOL_READY.description,
+        icon: BADGES.SCHOOL_READY.icon,
+        requirement: BADGES.SCHOOL_READY.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    if (streakUpdate.currentStreak >= 7) {
+      const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+      transaction.set(badgeCommittedRef, {
+        id: `${callerUid}_COMMITTED`,
+        userId: callerUid,
+        badgeKey: 'COMMITTED',
+        name: BADGES.COMMITTED.name,
+        description: BADGES.COMMITTED.description,
+        icon: BADGES.COMMITTED.icon,
+        requirement: BADGES.COMMITTED.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    if (streakUpdate.currentStreak >= 30) {
+      const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+      transaction.set(badgeDiscRef, {
+        id: `${callerUid}_DISCIPLINED`,
+        userId: callerUid,
+        badgeKey: 'DISCIPLINED',
+        name: BADGES.DISCIPLINED.name,
+        description: BADGES.DISCIPLINED.description,
+        icon: BADGES.DISCIPLINED.icon,
+        requirement: BADGES.DISCIPLINED.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    // 8. Update user profile quick access flags and reward/XP state
     transaction.set(userDocRef, {
       communityAccess: true,
       schoolAccess: qualifiesForSchool,
       qualifyingContainerCount,
       xp: totalXp,
       level,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
       updatedAt: now,
     }, { merge: true });
 
-    // 7. Authoritative activation audit log
+    // 9. Sync userGamification document
+    const gamificationRef = db.collection('userGamification').doc(callerUid);
+    transaction.set(gamificationRef, {
+      userId: callerUid,
+      xp: totalXp,
+      level,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    // 10. Authoritative activation audit log
     const auditDocRef = db.collection('auditLogs').doc();
     transaction.set(auditDocRef, {
       id: auditDocRef.id,
@@ -750,6 +888,8 @@ export const activateContainerCode = functions.https.onCall(async (data, context
         xpAwarded: awardedXp,
         totalXp,
         level,
+        currentStreak: streakUpdate.currentStreak,
+        longestStreak: streakUpdate.longestStreak,
         enforcedBy: 'SERVER_TRANSACTION',
       },
     });
@@ -3160,8 +3300,13 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
   const progressId = `${callerUid}_${courseId}`;
   const progressRef = db.collection('schoolProgress').doc(progressId);
   const enrollmentRef = db.collection('enrollments').doc(progressId);
+  const userDocRef = db.collection('users').doc(callerUid);
 
-  const [progressSnap, enrollmentSnap] = await Promise.all([progressRef.get(), enrollmentRef.get()]);
+  const [progressSnap, enrollmentSnap, userSnap] = await Promise.all([
+    progressRef.get(),
+    enrollmentRef.get(),
+    userDocRef.get(),
+  ]);
 
   const existingCompletedIds: string[] = progressSnap.exists
     ? progressSnap.data()?.completedLessonIds || []
@@ -3179,8 +3324,158 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
 
   const isCompleted = progressPercent >= 100;
   const now = new Date().toISOString();
+  const today = now.slice(0, 10);
 
   const batch = db.batch();
+
+  // Gamification & XP Awarding
+  const userData = userSnap.exists ? userSnap.data() : null;
+  const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+  let totalAwardedXp = 0;
+
+  const isNewLessonCompletion = !existingCompletedIds.includes(lessonId);
+  const wasCourseCompleted = progressSnap.exists && progressSnap.data()?.isCompleted === true;
+  const isNewCourseCompletion = isCompleted && !wasCourseCompleted;
+
+  if (isNewLessonCompletion) {
+    const lessonXp = XP_VALUES.SCHOOL_LESSON_COMPLETED; // 15 XP
+    totalAwardedXp += lessonXp;
+    const lessonXpTxRef = db.collection('xpTransactions').doc(`xp_lesson_${callerUid}_${courseId}_${lessonId}`);
+    batch.set(lessonXpTxRef, {
+      id: lessonXpTxRef.id,
+      userId: callerUid,
+      amount: lessonXp,
+      type: 'EARNED',
+      source: 'SCHOOL_LESSON_COMPLETED',
+      sourceId: `${courseId}_${lessonId}`,
+      createdAt: now,
+      metadata: { courseId, lessonId },
+    });
+
+    const milestoneFirstLessonRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_LESSON`);
+    batch.set(milestoneFirstLessonRef, {
+      id: `${callerUid}_FIRST_LESSON`,
+      userId: callerUid,
+      milestoneKey: 'FIRST_LESSON',
+      title: MILESTONES.FIRST_LESSON.title,
+      description: MILESTONES.FIRST_LESSON.description,
+      achievedAt: now,
+    }, { merge: true });
+  }
+
+  if (isNewCourseCompletion) {
+    const courseXp = XP_VALUES.SCHOOL_COURSE_COMPLETED; // 250 XP
+    totalAwardedXp += courseXp;
+    const courseXpTxRef = db.collection('xpTransactions').doc(`xp_course_${callerUid}_${courseId}`);
+    batch.set(courseXpTxRef, {
+      id: courseXpTxRef.id,
+      userId: callerUid,
+      amount: courseXp,
+      type: 'EARNED',
+      source: 'SCHOOL_COURSE_COMPLETED',
+      sourceId: courseId,
+      createdAt: now,
+      metadata: { courseId },
+    });
+
+    const milestoneCourseRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_COURSE_COMPLETED`);
+    batch.set(milestoneCourseRef, {
+      id: `${callerUid}_FIRST_COURSE_COMPLETED`,
+      userId: callerUid,
+      milestoneKey: 'FIRST_COURSE_COMPLETED',
+      title: MILESTONES.FIRST_COURSE_COMPLETED.title,
+      description: MILESTONES.FIRST_COURSE_COMPLETED.description,
+      achievedAt: now,
+    }, { merge: true });
+
+    const badgeLearnerRef = db.collection('userBadges').doc(`${callerUid}_LEARNER`);
+    batch.set(badgeLearnerRef, {
+      id: `${callerUid}_LEARNER`,
+      userId: callerUid,
+      badgeKey: 'LEARNER',
+      name: BADGES.LEARNER.name,
+      description: BADGES.LEARNER.description,
+      icon: BADGES.LEARNER.icon,
+      requirement: BADGES.LEARNER.requirement,
+      awardedAt: now,
+    }, { merge: true });
+
+    const completedCoursesSnap = await db.collection('schoolProgress')
+      .where('userId', '==', callerUid)
+      .where('isCompleted', '==', true)
+      .get();
+    const totalCompleted = completedCoursesSnap.docs.filter((d) => d.id !== progressId).length + 1;
+    if (totalCompleted >= 3) {
+      const badgeScholarRef = db.collection('userBadges').doc(`${callerUid}_SCHOLAR`);
+      batch.set(badgeScholarRef, {
+        id: `${callerUid}_SCHOLAR`,
+        userId: callerUid,
+        badgeKey: 'SCHOLAR',
+        name: BADGES.SCHOLAR.name,
+        description: BADGES.SCHOLAR.description,
+        icon: BADGES.SCHOLAR.icon,
+        requirement: BADGES.SCHOLAR.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+  }
+
+  // Streak update on lesson completion
+  const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+  const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+  const lastActivityDate = userData?.lastActivityDate || null;
+  const streakUpdate = calculateStreakUpdate(currentStreak, longestStreak, lastActivityDate, today);
+
+  if (streakUpdate.currentStreak >= 7) {
+    const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+    batch.set(badgeCommittedRef, {
+      id: `${callerUid}_COMMITTED`,
+      userId: callerUid,
+      badgeKey: 'COMMITTED',
+      name: BADGES.COMMITTED.name,
+      description: BADGES.COMMITTED.description,
+      icon: BADGES.COMMITTED.icon,
+      requirement: BADGES.COMMITTED.requirement,
+      awardedAt: now,
+    }, { merge: true });
+  }
+
+  if (streakUpdate.currentStreak >= 30) {
+    const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+    batch.set(badgeDiscRef, {
+      id: `${callerUid}_DISCIPLINED`,
+      userId: callerUid,
+      badgeKey: 'DISCIPLINED',
+      name: BADGES.DISCIPLINED.name,
+      description: BADGES.DISCIPLINED.description,
+      icon: BADGES.DISCIPLINED.icon,
+      requirement: BADGES.DISCIPLINED.requirement,
+      awardedAt: now,
+    }, { merge: true });
+  }
+
+  const newTotalXp = currentXp + totalAwardedXp;
+  const newLevel = calculateLevel(newTotalXp).currentLevel;
+
+  batch.set(userDocRef, {
+    xp: newTotalXp,
+    level: newLevel,
+    currentStreak: streakUpdate.currentStreak,
+    longestStreak: streakUpdate.longestStreak,
+    lastActivityDate: today,
+    updatedAt: now,
+  }, { merge: true });
+
+  const gamificationRef = db.collection('userGamification').doc(callerUid);
+  batch.set(gamificationRef, {
+    userId: callerUid,
+    xp: newTotalXp,
+    level: newLevel,
+    currentStreak: streakUpdate.currentStreak,
+    longestStreak: streakUpdate.longestStreak,
+    lastActivityDate: today,
+    updatedAt: now,
+  }, { merge: true });
 
   // Progress update
   const progressDoc = {
@@ -3253,7 +3548,700 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
     totalLessonsCount: effectiveTotalLessons,
     isCompleted,
     completedAt: progressDoc.completedAt,
+    xpAwarded: totalAwardedXp,
+    totalXp: newTotalXp,
+    level: newLevel,
   };
+});
+
+/**
+ * =============================================================================
+ * AUTHORITATIVE GAMIFICATION & REWARDS CLOUD FUNCTIONS
+ * Server-authoritative engine for XP redemption, journey milestones, community XP,
+ * and seed catalogue.
+ * =============================================================================
+ */
+
+/**
+ * Redeem Reward via Authoritative Cloud Function.
+ * Atomic, transactional XP deduction and stock verification.
+ */
+export const redeemReward = functions.https.onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'Authentication is required to redeem rewards.'
+    );
+  }
+
+  const { rewardId, idempotencyKey } = request.data || {};
+  if (!rewardId || typeof rewardId !== 'string') {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'A valid rewardId string is required.'
+    );
+  }
+
+  const rewardDocRef = db.collection('rewards').doc(rewardId);
+  const userDocRef = db.collection('users').doc(callerUid);
+  const redemptionDocRef = db.collection('rewardRedemptions').doc(
+    idempotencyKey && typeof idempotencyKey === 'string'
+      ? `${callerUid}_${idempotencyKey}`
+      : db.collection('rewardRedemptions').doc().id
+  );
+
+  return await db.runTransaction(async (transaction) => {
+    // Check if already redeemed with this idempotency key
+    const existingRedemptionSnap = await transaction.get(redemptionDocRef);
+    if (existingRedemptionSnap.exists) {
+      const data = existingRedemptionSnap.data();
+      return {
+        success: true,
+        alreadyRedeemed: true,
+        redemptionId: redemptionDocRef.id,
+        rewardTitle: data?.rewardTitle || 'Reward',
+        remainingXp: data?.remainingXp || 0,
+      };
+    }
+
+    const [rewardSnap, userSnap] = await Promise.all([
+      transaction.get(rewardDocRef),
+      transaction.get(userDocRef),
+    ]);
+
+    if (!rewardSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'The requested reward does not exist.');
+    }
+
+    const rewardData = rewardSnap.data();
+    if (!rewardData?.isActive) {
+      throw new functions.https.HttpsError('failed-precondition', 'This reward is not currently active.');
+    }
+
+    if (rewardData.stock !== null && typeof rewardData.stock === 'number' && rewardData.stock <= 0) {
+      throw new functions.https.HttpsError('resource-exhausted', 'This reward is currently out of stock.');
+    }
+
+    if (!userSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'User profile not found.');
+    }
+
+    const userData = userSnap.data();
+    const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+    const xpCost = typeof rewardData.xpCost === 'number' ? rewardData.xpCost : 0;
+
+    if (currentXp < xpCost) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `Insufficient XP balance. You have ${currentXp} XP, but this reward requires ${xpCost} XP.`
+      );
+    }
+
+    const remainingXp = currentXp - xpCost;
+    const newLevel = calculateLevel(remainingXp).currentLevel;
+    const now = new Date().toISOString();
+
+    // 1. Decrement user XP
+    transaction.update(userDocRef, {
+      xp: remainingXp,
+      level: newLevel,
+      updatedAt: now,
+    });
+
+    // 2. Decrement stock if finite
+    if (rewardData.stock !== null && typeof rewardData.stock === 'number') {
+      transaction.update(rewardDocRef, {
+        stock: admin.firestore.FieldValue.increment(-1),
+        updatedAt: now,
+      });
+    }
+
+    // 3. Create XP debit transaction in authoritative ledger
+    const xpTxRef = db.collection('xpTransactions').doc(`xp_redeem_${redemptionDocRef.id}`);
+    transaction.set(xpTxRef, {
+      id: xpTxRef.id,
+      userId: callerUid,
+      amount: -xpCost,
+      type: 'REDEEMED',
+      source: 'REWARD_REDEMPTION',
+      sourceId: rewardId,
+      createdAt: now,
+      metadata: {
+        rewardTitle: rewardData.title,
+        rewardType: rewardData.type,
+        xpCost,
+      },
+    });
+
+    // 4. Record authoritative redemption record
+    transaction.set(redemptionDocRef, {
+      id: redemptionDocRef.id,
+      userId: callerUid,
+      rewardId,
+      rewardTitle: rewardData.title,
+      xpCost,
+      status: 'COMPLETED',
+      createdAt: now,
+      metadata: {
+        rewardType: rewardData.type,
+        remainingXp,
+      },
+    });
+
+    // 5. Update userGamification snapshot
+    const gamificationRef = db.collection('userGamification').doc(callerUid);
+    transaction.set(gamificationRef, {
+      userId: callerUid,
+      xp: remainingXp,
+      level: newLevel,
+      updatedAt: now,
+    }, { merge: true });
+
+    // 6. Audit log
+    const auditDocRef = db.collection('auditLogs').doc();
+    transaction.set(auditDocRef, {
+      id: auditDocRef.id,
+      actorUserId: callerUid,
+      actorEmail: request.auth?.token.email || null,
+      actorRoles: request.auth?.token.roles || ['CUSTOMER'],
+      action: 'REWARD_REDEEMED',
+      resourceType: 'rewards',
+      resourceId: rewardId,
+      timestamp: now,
+      metadata: {
+        redemptionId: redemptionDocRef.id,
+        rewardTitle: rewardData.title,
+        xpCost,
+        remainingXp,
+      },
+    });
+
+    return {
+      success: true,
+      redemptionId: redemptionDocRef.id,
+      rewardTitle: rewardData.title,
+      remainingXp,
+    };
+  });
+});
+
+/**
+ * Complete a 90-Day Journey Protocol Day via Authoritative Cloud Function.
+ * Awards daily adherence XP (10 XP), evaluates milestones (Day 30 Phase 1, Day 90 Full Program),
+ * updates streak, and awards badges.
+ */
+export const completeJourneyDay = functions.https.onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+  }
+
+  const { dayNumber, notes } = request.data || {};
+  const day = parseInt(dayNumber, 10);
+  if (isNaN(day) || day < 1 || day > 90) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'dayNumber must be an integer between 1 and 90.'
+    );
+  }
+
+  const userDocRef = db.collection('users').doc(callerUid);
+  const journeyLogRef = db.collection('journeyLogs').doc(`${callerUid}_day_${day}`);
+  const xpTxDayRef = db.collection('xpTransactions').doc(`xp_journey_day_${callerUid}_${day}`);
+
+  return await db.runTransaction(async (transaction) => {
+    // Check if day already logged
+    const [userSnap, logSnap, xpSnap] = await Promise.all([
+      transaction.get(userDocRef),
+      transaction.get(journeyLogRef),
+      transaction.get(xpTxDayRef),
+    ]);
+
+    if (!userSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'User profile not found.');
+    }
+
+    const userData = userSnap.data();
+    const hasLinkedProduct =
+      (typeof userData?.qualifyingContainerCount === 'number' && userData.qualifyingContainerCount > 0) ||
+      userData?.communityAccess === true;
+
+    if (!hasLinkedProduct) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'You must activate at least one authentic ZIRON container to log protocol days.'
+      );
+    }
+
+    if (logSnap.exists || xpSnap.exists) {
+      return {
+        success: true,
+        alreadyCompleted: true,
+        dayNumber: day,
+        totalXp: userData?.xp || 0,
+        currentStreak: userData?.currentStreak || 0,
+      };
+    }
+
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+    const dayXp = XP_VALUES.JOURNEY_DAY_COMPLETED; // 10 XP
+    let totalAwardedXp = dayXp;
+
+    // 1. Record day adherence XP transaction
+    transaction.set(xpTxDayRef, {
+      id: xpTxDayRef.id,
+      userId: callerUid,
+      amount: dayXp,
+      type: 'EARNED',
+      source: 'JOURNEY_DAY_COMPLETED',
+      sourceId: `day_${day}`,
+      createdAt: now,
+      metadata: { dayNumber: day, notes: notes || null },
+    });
+
+    // 2. Record journey log doc
+    transaction.set(journeyLogRef, {
+      id: journeyLogRef.id,
+      userId: callerUid,
+      dayNumber: day,
+      notes: notes || null,
+      completedAt: now,
+    });
+
+    // 3. Phase 1 Milestone & XP (Day 30)
+    if (day === 30) {
+      const phaseXp = XP_VALUES.JOURNEY_PHASE_COMPLETED; // 100 XP
+      totalAwardedXp += phaseXp;
+      const phaseTxRef = db.collection('xpTransactions').doc(`xp_phase1_${callerUid}`);
+      transaction.set(phaseTxRef, {
+        id: phaseTxRef.id,
+        userId: callerUid,
+        amount: phaseXp,
+        type: 'EARNED',
+        source: 'JOURNEY_PHASE_COMPLETED',
+        sourceId: 'phase_1',
+        createdAt: now,
+        metadata: { phase: 1, dayNumber: 30 },
+      });
+
+      const milestonePhaseRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_PHASE_COMPLETED`);
+      transaction.set(milestonePhaseRef, {
+        id: `${callerUid}_FIRST_PHASE_COMPLETED`,
+        userId: callerUid,
+        milestoneKey: 'FIRST_PHASE_COMPLETED',
+        title: MILESTONES.FIRST_PHASE_COMPLETED.title,
+        description: MILESTONES.FIRST_PHASE_COMPLETED.description,
+        achievedAt: now,
+      }, { merge: true });
+    }
+
+    // 4. Full 90-Day Milestone & Badge (Day 90)
+    if (day === 90) {
+      const milestone90Ref = db.collection('userMilestones').doc(`${callerUid}_FULL_90_DAY_PROGRAM`);
+      transaction.set(milestone90Ref, {
+        id: `${callerUid}_FULL_90_DAY_PROGRAM`,
+        userId: callerUid,
+        milestoneKey: 'FULL_90_DAY_PROGRAM',
+        title: MILESTONES.FULL_90_DAY_PROGRAM.title,
+        description: MILESTONES.FULL_90_DAY_PROGRAM.description,
+        achievedAt: now,
+      }, { merge: true });
+
+      const badgeJourneyRef = db.collection('userBadges').doc(`${callerUid}_JOURNEY_COMPLETE`);
+      transaction.set(badgeJourneyRef, {
+        id: `${callerUid}_JOURNEY_COMPLETE`,
+        userId: callerUid,
+        badgeKey: 'JOURNEY_COMPLETE',
+        name: BADGES.JOURNEY_COMPLETE.name,
+        description: BADGES.JOURNEY_COMPLETE.description,
+        icon: BADGES.JOURNEY_COMPLETE.icon,
+        requirement: BADGES.JOURNEY_COMPLETE.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    // 5. Streak update
+    const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+    const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+    const lastActivityDate = userData?.lastActivityDate || null;
+    const streakUpdate = calculateStreakUpdate(currentStreak, longestStreak, lastActivityDate, today);
+
+    if (streakUpdate.currentStreak >= 7) {
+      const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+      transaction.set(badgeCommittedRef, {
+        id: `${callerUid}_COMMITTED`,
+        userId: callerUid,
+        badgeKey: 'COMMITTED',
+        name: BADGES.COMMITTED.name,
+        description: BADGES.COMMITTED.description,
+        icon: BADGES.COMMITTED.icon,
+        requirement: BADGES.COMMITTED.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    if (streakUpdate.currentStreak >= 30) {
+      const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+      transaction.set(badgeDiscRef, {
+        id: `${callerUid}_DISCIPLINED`,
+        userId: callerUid,
+        badgeKey: 'DISCIPLINED',
+        name: BADGES.DISCIPLINED.name,
+        description: BADGES.DISCIPLINED.description,
+        icon: BADGES.DISCIPLINED.icon,
+        requirement: BADGES.DISCIPLINED.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+    const newTotalXp = currentXp + totalAwardedXp;
+    const newLevel = calculateLevel(newTotalXp).currentLevel;
+
+    // 6. Update user doc
+    transaction.set(userDocRef, {
+      xp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    // 7. Update userGamification doc
+    const gamificationRef = db.collection('userGamification').doc(callerUid);
+    transaction.set(gamificationRef, {
+      userId: callerUid,
+      xp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    // 8. Audit log
+    const auditDocRef = db.collection('auditLogs').doc();
+    transaction.set(auditDocRef, {
+      id: auditDocRef.id,
+      actorUserId: callerUid,
+      actorEmail: request.auth?.token.email || null,
+      actorRoles: request.auth?.token.roles || ['CUSTOMER'],
+      action: 'JOURNEY_DAY_COMPLETED',
+      resourceType: 'journeyLogs',
+      resourceId: journeyLogRef.id,
+      timestamp: now,
+      metadata: {
+        dayNumber: day,
+        awardedXp: totalAwardedXp,
+        newTotalXp,
+        currentStreak: streakUpdate.currentStreak,
+      },
+    });
+
+    return {
+      success: true,
+      dayNumber: day,
+      awardedXp: totalAwardedXp,
+      totalXp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+    };
+  });
+});
+
+/**
+ * Authoritative Community Post Creation Cloud Function.
+ * Verifies entitlement, persists discussion post, awards 10 XP, and maintains activity streak.
+ */
+export const createCommunityPost = functions.https.onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+  }
+
+  const { title, body, tags } = request.data || {};
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'A non-empty title is required.');
+  }
+  if (!body || typeof body !== 'string' || body.trim().length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'A non-empty body is required.');
+  }
+
+  const entDocRef = db.collection('entitlements').doc(`${callerUid}_COMMUNITY_ACCESS`);
+  const userDocRef = db.collection('users').doc(callerUid);
+
+  return await db.runTransaction(async (transaction) => {
+    const [entSnap, userSnap] = await Promise.all([
+      transaction.get(entDocRef),
+      transaction.get(userDocRef),
+    ]);
+
+    const isAuthorized =
+      (entSnap.exists && entSnap.data()?.status === 'ACTIVE') ||
+      (userSnap.exists && userSnap.data()?.communityAccess === true);
+
+    if (!isAuthorized) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'Active community entitlement is required to publish discussions.'
+      );
+    }
+
+    const userData = userSnap.data();
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+    const postRef = db.collection('communityPosts').doc();
+
+    const postDoc = {
+      id: postRef.id,
+      title: title.trim(),
+      body: body.trim(),
+      authorId: callerUid,
+      authorName:
+        userData?.displayName ||
+        (userData?.firstName && userData?.lastName ? `${userData.firstName} ${userData.lastName}` : 'Community Member'),
+      authorRole: Array.isArray(userData?.roles) && userData.roles.length > 0 ? userData.roles[0] : 'CUSTOMER',
+      tags: Array.isArray(tags) ? tags.slice(0, 5) : [],
+      likesCount: 0,
+      commentsCount: 0,
+      isLocked: false,
+      status: 'published',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    transaction.set(postRef, postDoc);
+
+    // Award 10 XP for post creation
+    const postXp = XP_VALUES.COMMUNITY_POST_CREATED; // 10 XP
+    const xpTxRef = db.collection('xpTransactions').doc(`xp_post_${callerUid}_${postRef.id}`);
+    transaction.set(xpTxRef, {
+      id: xpTxRef.id,
+      userId: callerUid,
+      amount: postXp,
+      type: 'EARNED',
+      source: 'COMMUNITY_POST_CREATED',
+      sourceId: postRef.id,
+      createdAt: now,
+      metadata: { title: title.trim() },
+    });
+
+    // Streak update
+    const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+    const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+    const lastActivityDate = userData?.lastActivityDate || null;
+    const streakUpdate = calculateStreakUpdate(currentStreak, longestStreak, lastActivityDate, today);
+
+    if (streakUpdate.currentStreak >= 7) {
+      const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+      transaction.set(badgeCommittedRef, {
+        id: `${callerUid}_COMMITTED`,
+        userId: callerUid,
+        badgeKey: 'COMMITTED',
+        name: BADGES.COMMITTED.name,
+        description: BADGES.COMMITTED.description,
+        icon: BADGES.COMMITTED.icon,
+        requirement: BADGES.COMMITTED.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    if (streakUpdate.currentStreak >= 30) {
+      const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+      transaction.set(badgeDiscRef, {
+        id: `${callerUid}_DISCIPLINED`,
+        userId: callerUid,
+        badgeKey: 'DISCIPLINED',
+        name: BADGES.DISCIPLINED.name,
+        description: BADGES.DISCIPLINED.description,
+        icon: BADGES.DISCIPLINED.icon,
+        requirement: BADGES.DISCIPLINED.requirement,
+        awardedAt: now,
+      }, { merge: true });
+    }
+
+    const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+    const newTotalXp = currentXp + postXp;
+    const newLevel = calculateLevel(newTotalXp).currentLevel;
+
+    transaction.set(userDocRef, {
+      xp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    const gamificationRef = db.collection('userGamification').doc(callerUid);
+    transaction.set(gamificationRef, {
+      userId: callerUid,
+      xp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    return {
+      success: true,
+      postId: postRef.id,
+      awardedXp: postXp,
+      totalXp: newTotalXp,
+    };
+  });
+});
+
+/**
+ * Authoritative Community Comment Creation Cloud Function.
+ * Awards 5 XP and maintains activity streak.
+ */
+export const createCommunityComment = functions.https.onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+  }
+
+  const { postId, body } = request.data || {};
+  if (!postId || typeof postId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'postId is required.');
+  }
+  if (!body || typeof body !== 'string' || body.trim().length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'A non-empty body is required.');
+  }
+
+  const postDocRef = db.collection('communityPosts').doc(postId);
+  const userDocRef = db.collection('users').doc(callerUid);
+  const entDocRef = db.collection('entitlements').doc(`${callerUid}_COMMUNITY_ACCESS`);
+
+  return await db.runTransaction(async (transaction) => {
+    const [postSnap, userSnap, entSnap] = await Promise.all([
+      transaction.get(postDocRef),
+      transaction.get(userDocRef),
+      transaction.get(entDocRef),
+    ]);
+
+    if (!postSnap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Discussion post not found.');
+    }
+
+    const isAuthorized =
+      (entSnap.exists && entSnap.data()?.status === 'ACTIVE') ||
+      (userSnap.exists && userSnap.data()?.communityAccess === true);
+
+    if (!isAuthorized) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'Active community entitlement is required to participate in discussions.'
+      );
+    }
+
+    const userData = userSnap.data();
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+    const commentRef = db.collection('communityComments').doc();
+
+    transaction.set(commentRef, {
+      id: commentRef.id,
+      postId,
+      authorId: callerUid,
+      authorName:
+        userData?.displayName ||
+        (userData?.firstName && userData?.lastName ? `${userData.firstName} ${userData.lastName}` : 'Community Member'),
+      body: body.trim(),
+      createdAt: now,
+    });
+
+    transaction.update(postDocRef, {
+      commentsCount: admin.firestore.FieldValue.increment(1),
+      updatedAt: now,
+    });
+
+    // Award 5 XP for comment creation
+    const commentXp = XP_VALUES.COMMUNITY_COMMENT_CREATED; // 5 XP
+    const xpTxRef = db.collection('xpTransactions').doc(`xp_comment_${callerUid}_${commentRef.id}`);
+    transaction.set(xpTxRef, {
+      id: xpTxRef.id,
+      userId: callerUid,
+      amount: commentXp,
+      type: 'EARNED',
+      source: 'COMMUNITY_COMMENT_CREATED',
+      sourceId: commentRef.id,
+      createdAt: now,
+      metadata: { postId },
+    });
+
+    // Streak update
+    const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+    const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+    const lastActivityDate = userData?.lastActivityDate || null;
+    const streakUpdate = calculateStreakUpdate(currentStreak, longestStreak, lastActivityDate, today);
+
+    const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+    const newTotalXp = currentXp + commentXp;
+    const newLevel = calculateLevel(newTotalXp).currentLevel;
+
+    transaction.set(userDocRef, {
+      xp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    const gamificationRef = db.collection('userGamification').doc(callerUid);
+    transaction.set(gamificationRef, {
+      userId: callerUid,
+      xp: newTotalXp,
+      level: newLevel,
+      currentStreak: streakUpdate.currentStreak,
+      longestStreak: streakUpdate.longestStreak,
+      lastActivityDate: today,
+      updatedAt: now,
+    }, { merge: true });
+
+    return {
+      success: true,
+      commentId: commentRef.id,
+      awardedXp: commentXp,
+      totalXp: newTotalXp,
+    };
+  });
+});
+
+/**
+ * Seed Initial Rewards Catalogue via Cloud Function.
+ */
+export const seedInitialRewards = functions.https.onCall(async (request) => {
+  const callerUid = request.auth?.uid;
+  if (!callerUid) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+  }
+
+  const batch = db.batch();
+  const now = new Date().toISOString();
+
+  for (const reward of INITIAL_REWARDS) {
+    const docRef = db.collection('rewards').doc(reward.id);
+    batch.set(
+      docRef,
+      {
+        ...reward,
+        createdAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  }
+
+  await batch.commit();
+
+  return { success: true, count: INITIAL_REWARDS.length };
 });
 
 
