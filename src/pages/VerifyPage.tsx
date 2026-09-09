@@ -105,11 +105,26 @@ export const VerifyPage: React.FC = () => {
         <section className="bg-white border border-[#E2E8F0] p-6 sm:p-12 relative overflow-hidden">
           <GridPattern />
           <div className="relative z-10 max-w-3xl">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-gray-100 border border-[#E2E8F0] mb-4">
-              <Shield className="w-3.5 h-3.5 text-[#0B2346]" />
-              <span className="text-[10px] font-mono uppercase tracking-widest text-[#0B2346] font-bold">
-                {v.badge}
-              </span>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-gray-100 border border-[#E2E8F0]">
+                <Shield className="w-3.5 h-3.5 text-[#0B2346]" />
+                <span className="text-[10px] font-mono uppercase tracking-widest text-[#0B2346] font-bold">
+                  {v.badge}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('verify/certificate')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-[#0B2346] border border-blue-200 text-[10px] font-mono uppercase font-bold hover:bg-blue-100 cursor-pointer"
+              >
+                <span>
+                  {locale === 'ar'
+                    ? 'التحقق من الشهادات والاعتمادات التعليمية ←'
+                    : locale === 'fr'
+                    ? 'Vérifier un Certificat d’Études ←'
+                    : 'Verify Educational Certificate ←'}
+                </span>
+              </button>
             </div>
 
             <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-[#0B2346] leading-tight mb-4">

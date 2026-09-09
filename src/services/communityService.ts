@@ -161,25 +161,49 @@ export async function createCommunityPost(
     throw new Error('Body must be between 1 and 5000 characters.');
   }
 
-  const now = new Date().toISOString();
-  const postData: Omit<CommunityPost, 'id'> = {
-    authorId: author.uid,
-    authorName: author.displayName,
-    authorRoles: author.roles,
-    title: cleanTitle,
-    body: cleanBody,
-    tags,
-    likesCount: 0,
-    commentsCount: 0,
-    isLocked: false,
-    isPinned: false,
-    status: 'published',
-    createdAt: now,
-    updatedAt: now,
-  };
+  const createCallable = httpsCallable<
+    { title: string; body: string; tags: string[] },
+    { success: boolean; postId: string; awardedXp?: number; totalXp?: number }
+  >(functionsInstance, 'createCommunityPost');
 
-  const docRef = await addDoc(collection(db, POSTS_COLLECTION), postData);
-  return docRef.id;
+  try {
+    const res = await createCallable({
+      title: cleanTitle,
+      body: cleanBody,
+      tags,
+    });
+    return res.data.postId;
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to publish community post.');
+  }
+}
+
+/**
+ * Creates a comment on a community post via authoritative Cloud Function.
+ * Verifies entitlement, persists comment, and awards 5 XP server-side.
+ */
+export async function createCommunityComment(
+  postId: string,
+  body: string
+): Promise<string> {
+  const cleanBody = body.trim();
+  if (!cleanBody) {
+    throw new Error('Comment body cannot be empty.');
+  }
+
+  const commentCallable = httpsCallable<
+    { postId: string; body: string },
+    { success: boolean; commentId: string; awardedXp?: number; totalXp?: number }
+  >(functionsInstance, 'createCommunityComment');
+
+  try {
+    const res = await commentCallable({ postId, body: cleanBody });
+    return res.data.commentId;
+  } catch (err: unknown) {
+    const error = err as { message?: string };
+    throw new Error(error.message || 'Failed to submit comment.');
+  }
 }
 
 /**

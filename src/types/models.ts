@@ -159,14 +159,46 @@ export interface SchoolQuiz {
 
 export interface SchoolCertificate {
   id: string;
+  certificateId: string;
   certificateNumber: string;
   userId: string;
-  userDisplayName: string;
+  recipientName: string;
+  userDisplayName?: string;
   courseId: string;
   courseTitle: string;
-  issueDate: string;
-  isRevoked: boolean;
-  verificationHash: string;
+  categoryTitle?: string;
+  issuedAt: string;
+  issueDate?: string;
+  completedAt: string;
+  issuer: string;
+  status: 'ACTIVE' | 'REVOKED';
+  isRevoked?: boolean;
+  verificationToken: string;
+  verificationHash?: string;
+  verificationUrl: string;
+  certificateType: 'COURSE_COMPLETION';
+  createdAt: string;
+  updatedAt: string;
+  revokedAt?: string | null;
+  revocationReason?: string | null;
+  revokedBy?: string | null;
+}
+
+export interface PublicCertificate {
+  certificateNumber: string;
+  status: 'ACTIVE' | 'REVOKED';
+  courseTitle: string;
+  courseId: string;
+  recipientName: string;
+  completedAt: string;
+  issuedAt: string;
+  issuer: string;
+  certificateType: string;
+  verificationToken: string;
+  createdAt?: string;
+  updatedAt?: string;
+  revokedAt?: string | null;
+  revocationReason?: string | null;
 }
 
 export interface EnrollmentRecord {

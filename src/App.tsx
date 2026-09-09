@@ -20,6 +20,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { CommunityPage } from '@/pages/CommunityPage';
 import { SchoolPage } from '@/pages/SchoolPage';
+import { CertificateVerificationPage } from '@/pages/public/CertificateVerificationPage';
 
 // Authenticated app pages
 import { DashboardPage } from '@/pages/app/DashboardPage';
@@ -43,6 +44,7 @@ import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
 import { AdminCmsPage } from '@/pages/admin/AdminCmsPage';
 import { AdminProductsPage } from '@/pages/admin/AdminProductsPage';
 import { AdminCodesPage } from '@/pages/admin/AdminCodesPage';
+import { AdminCertificatesPage } from '@/pages/admin/AdminCertificatesPage';
 import { AdminPlaceholderPage } from '@/pages/admin/AdminPlaceholderPage';
 import { AdminRouteGuard } from '@/components/guards/AdminRouteGuard';
 
@@ -138,13 +140,7 @@ function RouterOutlet() {
       case 'admin/certificates':
         adminContent = (
           <AdminRouteGuard requiredPermission="MANAGE_SCHOOL">
-            <AdminPlaceholderPage
-              title="Verified Certificate Registry"
-              subtitle="Review issued course completion and trajectory milestone certificates."
-              code="CERT_01"
-              status="PLANNED"
-              milestoneDescription="Cryptographic certificate verification schema registered in Firestore rules. Issuance review UI planned for certification milestone."
-            />
+            <AdminCertificatesPage />
           </AdminRouteGuard>
         );
         break;
@@ -316,6 +312,10 @@ function RouterOutlet() {
       break;
     case 'verify':
       publicContent = <VerifyPage />;
+      break;
+    case 'verify/certificate':
+    case 'verify-certificate':
+      publicContent = <CertificateVerificationPage />;
       break;
     case 'shop':
       publicContent = <ShopPage />;

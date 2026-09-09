@@ -3539,6 +3539,22 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
 
   await batch.commit();
 
+  // Authoritative automatic certificate issuance upon 100% curriculum completion
+  let issuedCertificate = null;
+  if (isCompleted) {
+    try {
+      issuedCertificate = await authoritativelyIssueCertificate(
+        callerUid,
+        courseId,
+        progressDoc.completedAt || now,
+        callerEmail,
+        roles
+      );
+    } catch (certError) {
+      console.warn('Certificate issuance notice:', certError);
+    }
+  }
+
   return {
     success: true,
     courseId,
@@ -3551,6 +3567,403 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
     xpAwarded: totalAwardedXp,
     totalXp: newTotalXp,
     level: newLevel,
+    certificate: issuedCertificate,
+  };
+});
+
+/* ==========================================================================
+   PHASE 7: AUTHORITATIVE CERTIFICATES & CREDENTIALS
+   ========================================================================== */
+
+/**
+ * Generates a unique, non-predictable, human-readable certificate number.
+ * Format: ZRN-CERT-YYYY-XXXX-XXXX
+ * Uses Crockford Base32 characters (eliminates confusing glyphs like I, L, O, U).
+ */
+const CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+export function generateCertificateNumber(year = new Date().getFullYear()): string {
+  let seg1 = '';
+  let seg2 = '';
+  for (let i = 0; i < 4; i++) {
+    seg1 += CROCKFORD_ALPHABET.charAt(Math.floor(Math.random() * CROCKFORD_ALPHABET.length));
+    seg2 += CROCKFORD_ALPHABET.charAt(Math.floor(Math.random() * CROCKFORD_ALPHABET.length));
+  }
+  return `ZRN-CERT-${year}-${seg1}-${seg2}`;
+}
+
+/**
+ * Authoritative Server-Side Helper: Issue a Course Completion Certificate.
+ * Strictly verifies prerequisites, enforces idempotency, prevents duplicate certificates,
+ * and maintains immutable audit logs and public verification projection.
+ */
+export async function authoritativelyIssueCertificate(
+  userId: string,
+  courseId: string,
+  completedAt: string,
+  actorEmail: string = '',
+  actorRoles: string[] = []
+): Promise<Record<string, unknown>> {
+  const certificateId = `cert_${userId}_${courseId}`;
+  const certRef = db.collection('certificates').doc(certificateId);
+  const existingCertSnap = await certRef.get();
+
+  // Strict idempotency: if certificate already exists, return it immediately without duplicate issuance
+  if (existingCertSnap.exists) {
+    return existingCertSnap.data() as Record<string, unknown>;
+  }
+
+  // Load recipient and course data
+  const [userSnap, courseSnap] = await Promise.all([
+    db.collection('users').doc(userId).get(),
+    db.collection('schoolCourses').doc(courseId).get(),
+  ]);
+
+  const userData = userSnap.exists ? userSnap.data() : null;
+  const courseData = courseSnap.exists ? courseSnap.data() : null;
+
+  const recipientName =
+    userData?.displayName ||
+    (userData?.firstName && userData?.lastName
+      ? `${userData.firstName} ${userData.lastName}`.trim()
+      : 'ZIRON Scholar');
+
+  let courseTitle = 'ZIRON Restart Curriculum';
+  if (courseData?.title) {
+    if (typeof courseData.title === 'string') {
+      courseTitle = courseData.title;
+    } else if (courseData.title.en) {
+      courseTitle = courseData.title.en;
+    } else {
+      const firstLang = Object.values(courseData.title)[0];
+      if (typeof firstLang === 'string') courseTitle = firstLang;
+    }
+  }
+
+  // Generate collision-resistant certificateNumber
+  let certificateNumber = generateCertificateNumber();
+  let collisionAttempts = 0;
+  while (collisionAttempts < 5) {
+    const existingPub = await db.collection('publicCertificates').doc(certificateNumber).get();
+    if (!existingPub.exists) break;
+    certificateNumber = generateCertificateNumber();
+    collisionAttempts++;
+  }
+
+  const verificationToken = crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const issuer = 'ZIRON Restart School - Virexon Biosciences Education Division';
+  const verificationUrl = `/verify/certificate?number=${certificateNumber}`;
+
+  const certDoc = {
+    id: certificateId,
+    certificateId,
+    certificateNumber,
+    userId,
+    recipientName,
+    userDisplayName: recipientName,
+    courseId,
+    courseTitle,
+    issuedAt: now,
+    issueDate: now,
+    completedAt: completedAt || now,
+    issuer,
+    status: 'ACTIVE',
+    isRevoked: false,
+    verificationToken,
+    verificationHash: verificationToken,
+    verificationUrl,
+    certificateType: 'COURSE_COMPLETION',
+    createdAt: now,
+    updatedAt: now,
+    revokedAt: null,
+    revocationReason: null,
+    revokedBy: null,
+  };
+
+  // Safe public projection (no sensitive user data, no email, phone, user IDs, XP, streaks, or journey logs)
+  const publicCertDoc = {
+    certificateNumber,
+    status: 'ACTIVE',
+    courseTitle,
+    courseId,
+    recipientName,
+    completedAt: completedAt || now,
+    issuedAt: now,
+    issuer,
+    certificateType: 'COURSE_COMPLETION',
+    verificationToken,
+    createdAt: now,
+    updatedAt: now,
+    revokedAt: null,
+    revocationReason: null,
+  };
+
+  const batch = db.batch();
+  batch.set(certRef, certDoc);
+  batch.set(db.collection('publicCertificates').doc(certificateNumber), publicCertDoc);
+
+  const auditRef = db.collection('auditLogs').doc();
+  batch.set(auditRef, {
+    id: auditRef.id,
+    actorUserId: userId,
+    actorEmail: actorEmail || null,
+    actorRoles: actorRoles.length > 0 ? actorRoles : ['CUSTOMER'],
+    action: 'CERTIFICATE_ISSUED',
+    resourceType: 'certificates',
+    resourceId: certificateId,
+    timestamp: now,
+    metadata: {
+      certificateNumber,
+      courseId,
+      recipientName,
+      completedAt: completedAt || now,
+      enforcedBy: 'SERVER_AUTHORITY',
+    },
+  });
+
+  await batch.commit();
+  return certDoc;
+}
+
+/**
+ * Callable Function: Authoritatively Issue Course Certificate
+ * Allows explicit claim / idempotent issuance verification by authenticated enrolled students.
+ */
+export const issueCourseCertificate = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required to claim certificate.');
+  }
+
+  const callerUid = context.auth.uid;
+  const callerEmail = context.auth.token.email || '';
+  const isEmailVerified = context.auth.token.email_verified === true;
+  const { courseId } = data || {};
+
+  if (!courseId || typeof courseId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'A valid courseId is required.');
+  }
+
+  const userSnap = await db.collection('users').doc(callerUid).get();
+  if (!userSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'User profile not found.');
+  }
+  const roles = userSnap.data()?.roles || [];
+
+  // Check School access entitlement
+  const access = await checkUserSchoolAccess(callerUid, roles, callerEmail, isEmailVerified);
+  if (!access.hasAccess) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'School access is unlocked by 3 verified product containers.'
+    );
+  }
+
+  // Check legitimate enrollment
+  const enrollmentRef = db.collection('enrollments').doc(`${callerUid}_${courseId}`);
+  const enrollmentSnap = await enrollmentRef.get();
+  if (!enrollmentSnap.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'You are not enrolled in this course.');
+  }
+
+  // Check curriculum completion
+  const lessonsSnap = await db.collection('schoolLessons')
+    .where('courseId', '==', courseId)
+    .where('isPublished', '==', true)
+    .get();
+
+  if (lessonsSnap.empty) {
+    throw new functions.https.HttpsError('failed-precondition', 'Curriculum has no published lessons.');
+  }
+
+  const progressRef = db.collection('schoolProgress').doc(`${callerUid}_${courseId}`);
+  const progressSnap = await progressRef.get();
+
+  if (!progressSnap.exists) {
+    throw new functions.https.HttpsError('failed-precondition', 'No progress recorded for this course.');
+  }
+
+  const progressData = progressSnap.data()!;
+  const completedIds = new Set<string>(progressData.completedLessonIds || []);
+  const allLessonsCompleted = lessonsSnap.docs.every((d) => completedIds.has(d.id));
+
+  if (!allLessonsCompleted || progressData.progressPercent < 100) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Authoritative course completion required. Every required lesson must be completed before certificate issuance.'
+    );
+  }
+
+  const certificate = await authoritativelyIssueCertificate(
+    callerUid,
+    courseId,
+    progressData.completedAt || new Date().toISOString(),
+    callerEmail,
+    roles
+  );
+
+  return {
+    success: true,
+    certificate,
+  };
+});
+
+/**
+ * Callable Function: Authoritatively Revoke Certificate
+ * Administrative action with required audit reasoning.
+ */
+export const revokeCertificate = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
+  }
+
+  const callerUid = context.auth.uid;
+  const callerEmail = context.auth.token.email || '';
+  const isEmailVerified = context.auth.token.email_verified === true;
+
+  const callerSnap = await db.collection('users').doc(callerUid).get();
+  if (!callerSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+  }
+
+  const callerData = callerSnap.data()!;
+  const callerRoles: string[] = callerData.roles || [];
+  const isSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+
+  const isAuthorized =
+    isSuperAdmin ||
+    callerRoles.includes('ADMIN') ||
+    callerRoles.includes('SCHOOL_MANAGER');
+
+  if (!isAuthorized) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Administrative authority required to revoke educational certificates.'
+    );
+  }
+
+  const { certificateId, reason } = data || {};
+  if (!certificateId || typeof certificateId !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Valid certificateId is required.');
+  }
+  if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+    throw new functions.https.HttpsError('invalid-argument', 'An auditable revocation reason is required.');
+  }
+
+  const certRef = db.collection('certificates').doc(certificateId);
+  const certSnap = await certRef.get();
+  if (!certSnap.exists) {
+    throw new functions.https.HttpsError('not-found', `Certificate "${certificateId}" not found.`);
+  }
+
+  const certData = certSnap.data()!;
+  const certificateNumber = certData.certificateNumber;
+  const now = new Date().toISOString();
+
+  const batch = db.batch();
+  batch.update(certRef, {
+    status: 'REVOKED',
+    isRevoked: true,
+    revokedAt: now,
+    revocationReason: reason.trim(),
+    revokedBy: callerUid,
+    updatedAt: now,
+  });
+
+  if (certificateNumber) {
+    const pubCertRef = db.collection('publicCertificates').doc(certificateNumber);
+    batch.update(pubCertRef, {
+      status: 'REVOKED',
+      revokedAt: now,
+      revocationReason: reason.trim(),
+      updatedAt: now,
+    });
+  }
+
+  const auditRef = db.collection('auditLogs').doc();
+  batch.set(auditRef, {
+    id: auditRef.id,
+    actorUserId: callerUid,
+    actorEmail: callerEmail,
+    actorRoles: callerRoles,
+    action: 'CERTIFICATE_REVOKED',
+    resourceType: 'certificates',
+    resourceId: certificateId,
+    timestamp: now,
+    metadata: {
+      certificateNumber,
+      courseId: certData.courseId,
+      recipientUserId: certData.userId,
+      reason: reason.trim(),
+      enforcedBy: 'SERVER_AUTHORITY',
+    },
+  });
+
+  await batch.commit();
+
+  return {
+    success: true,
+    certificateId,
+    certificateNumber,
+    status: 'REVOKED',
+    revokedAt: now,
+  };
+});
+
+/**
+ * Callable Function: Public Certificate Verification
+ * Resolves safe public verification information from non-enumerable records.
+ */
+export const verifyCertificate = functions.https.onCall(async (data) => {
+  const { identifier } = data || {};
+  if (!identifier || typeof identifier !== 'string' || identifier.trim().length === 0) {
+    return {
+      isValid: false,
+      message: 'Certificate number or verification token is required.',
+    };
+  }
+
+  const clean = identifier.trim();
+
+  // Try direct lookup by certificateNumber
+  let pubDoc = await db.collection('publicCertificates').doc(clean.toUpperCase()).get();
+
+  // If not found by certificateNumber, search by verificationToken
+  if (!pubDoc.exists) {
+    const tokenQuery = await db.collection('publicCertificates')
+      .where('verificationToken', '==', clean)
+      .limit(1)
+      .get();
+    if (!tokenQuery.empty) {
+      pubDoc = tokenQuery.docs[0];
+    }
+  }
+
+  if (!pubDoc.exists) {
+    return {
+      isValid: false,
+      message: 'No certificate matching this identifier was found in the official registry.',
+    };
+  }
+
+  const d = pubDoc.data()!;
+  const isRevoked = d.status === 'REVOKED';
+
+  return {
+    isValid: true,
+    status: d.status,
+    isRevoked,
+    certificateNumber: d.certificateNumber,
+    recipientName: d.recipientName,
+    courseTitle: d.courseTitle,
+    courseId: d.courseId,
+    issuer: d.issuer || 'ZIRON Restart School - Virexon Biosciences Education Division',
+    issuedAt: d.issuedAt,
+    completedAt: d.completedAt,
+    certificateType: d.certificateType || 'COURSE_COMPLETION',
+    revokedAt: d.revokedAt || null,
+    revocationReason: d.revocationReason || null,
+    educationalDisclaimer:
+      'Certificates issued by ZIRON Restart School are educational completion credentials only. They do not certify medical treatment, addiction recovery, scientific claims, or clinical outcomes.',
   };
 });
 

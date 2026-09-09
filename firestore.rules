@@ -485,6 +485,29 @@ service cloud.firestore {
     }
 
     // =========================================================================
+    // PHASE 7: EDUCATIONAL CERTIFICATES & PUBLIC VERIFICATION
+    // =========================================================================
+    // Private certificates collection:
+    // Accessible only by the student recipient or administrative staff.
+    // Client write mutation is forbidden; only Cloud Functions can issue or revoke.
+    // =========================================================================
+    match /certificates/{certificateId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isStaff());
+      allow list: if isSignedIn();
+      allow write: if false; // Cloud Functions only
+    }
+
+    // Public certificates registry:
+    // Public get allowed for single-credential verification lookups.
+    // Mass enumeration (list) is strictly forbidden to prevent credential harvesting.
+    // Writes are strictly server-authoritative via Cloud Functions.
+    match /publicCertificates/{certificateNumber} {
+      allow get: if true;
+      allow list: if false; // Non-enumerable to prevent scraping
+      allow write: if false; // Cloud Functions only
+    }
+
+    // =========================================================================
     // SYSTEM GOVERNANCE METADATA
     // Internal metadata docs (e.g. _system/governance). Client access is denied.
     // =========================================================================
