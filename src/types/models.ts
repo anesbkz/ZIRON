@@ -194,7 +194,6 @@ export interface PublicCertificate {
   issuedAt: string;
   issuer: string;
   certificateType: string;
-  verificationToken: string;
   createdAt?: string;
   updatedAt?: string;
   revokedAt?: string | null;

@@ -344,7 +344,7 @@ service cloud.firestore {
 
     // =========================================================================
     // PUBLIC CERTIFICATES (Non-Enumerable Verification Endpoint)
-    // Keyed by certificateNumber (e.g., VIR-CERT-...).
+    // Keyed by certificateNumber (e.g., ZRN-CERT-...).
     // Allows direct get of known certificate, strictly forbids collection listing/enumeration.
     // =========================================================================
     match /publicCertificates/{certificateNumber} {

@@ -1350,83 +1350,141 @@ export const issueCertificate = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError('not-found', `School course "${courseId}" does not exist in curriculum.`);
   }
 
-  // 3. Prevent duplicate certificate issuance for same targetUserId + courseId
-  const existingCertQuery = await db
-    .collection('certificates')
-    .where('userId', '==', targetUserId)
-    .where('courseId', '==', courseId)
-    .where('status', '==', 'VALID')
-    .limit(1)
-    .get();
+  // 3. Prevent duplicate certificate issuance or reissuing revoked certificate
+  const certificateId = `cert_${targetUserId}_${courseId}`;
+  const certRef = db.collection('certificates').doc(certificateId);
 
-  if (!existingCertQuery.empty) {
-    throw new functions.https.HttpsError(
-      'already-exists',
-      `A valid certificate has already been issued to student "${targetUserId}" for course "${courseId}".`
-    );
+  // Fast check: if certificate exists
+  const existingCertSnap = await certRef.get();
+  if (existingCertSnap.exists) {
+    const existingData = existingCertSnap.data()!;
+    if (existingData.status === 'REVOKED' || existingData.isRevoked) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        `A certificate for student "${targetUserId}" on course "${courseId}" has been revoked by institutional authority and cannot be reissued.`
+      );
+    }
+    return {
+      success: true,
+      certificateId: existingData.id || certificateId,
+      certificateNumber: existingData.certificateNumber,
+      alreadyIssued: true,
+    };
   }
 
   const now = new Date().toISOString();
-  // Cryptographically secure collision-safe certificate number generation
-  const certNumber = generateCertificateNumber();
+  const issuer = 'ZIRON Restart School - Virexon Biosciences Education Division';
 
-  // 4. Collision check
-  const publicCertRef = db.collection('publicCertificates').doc(certNumber);
-  const existingPublic = await publicCertRef.get();
-  if (existingPublic.exists) {
-    throw new functions.https.HttpsError('already-exists', 'A certificate with this number already exists. Please retry.');
-  }
+  // Atomic transaction to guarantee collision check and concurrency safety
+  const result = await db.runTransaction(async (transaction) => {
+    const txCertSnap = await transaction.get(certRef);
+    if (txCertSnap.exists) {
+      const existingData = txCertSnap.data()!;
+      if (existingData.status === 'REVOKED' || existingData.isRevoked) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          `A certificate for student "${targetUserId}" on course "${courseId}" has been revoked by institutional authority and cannot be reissued.`
+        );
+      }
+      return {
+        success: true,
+        certificateId: existingData.id || certificateId,
+        certificateNumber: existingData.certificateNumber,
+        alreadyIssued: true,
+      };
+    }
 
-  const certificateId = `cert_${targetUserId}_${courseId}`;
-  const certRef = db.collection('certificates').doc(certificateId);
-  const batch = db.batch();
+    let candidateNumber = generateCertificateNumber();
+    let pubRef = db.collection('publicCertificates').doc(candidateNumber);
+    let pubSnap = await transaction.get(pubRef);
+    let collisionAttempts = 0;
+    while (pubSnap.exists && collisionAttempts < 5) {
+      candidateNumber = generateCertificateNumber();
+      pubRef = db.collection('publicCertificates').doc(candidateNumber);
+      pubSnap = await transaction.get(pubRef);
+      collisionAttempts++;
+    }
 
-  // 5. Full private record (includes targetUserId and student details)
-  batch.set(certRef, {
-    id: certificateId,
-    certificateId,
-    certificateNumber: certNumber,
-    userId: targetUserId,
-    recipientName,
-    courseId,
-    courseTitle,
-    issuedAt: now,
-    issueDate: now,
-    issuedByUid: callerUid,
-    status: 'ACTIVE',
-    isRevoked: false,
-    certificateType: 'COURSE_COMPLETION',
+    if (pubSnap.exists) {
+      throw new functions.https.HttpsError('already-exists', 'Certificate number collision encountered. Please retry.');
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const verificationUrl = `/verify/certificate?number=${candidateNumber}`;
+
+    const certDoc = {
+      id: certificateId,
+      certificateId,
+      certificateNumber: candidateNumber,
+      userId: targetUserId,
+      recipientName,
+      userDisplayName: recipientName,
+      courseId,
+      courseTitle,
+      issuedAt: now,
+      issueDate: now,
+      issuedByUid: callerUid,
+      completedAt: now,
+      issuer,
+      status: 'ACTIVE',
+      isRevoked: false,
+      verificationToken,
+      verificationHash: verificationToken,
+      verificationUrl,
+      certificateType: 'COURSE_COMPLETION',
+      createdAt: now,
+      updatedAt: now,
+      revokedAt: null,
+      revocationReason: null,
+      revokedBy: null,
+    };
+
+    const publicCertDoc = {
+      certificateNumber: candidateNumber,
+      status: 'ACTIVE',
+      courseTitle,
+      courseId,
+      recipientName,
+      completedAt: now,
+      issuedAt: now,
+      issuer,
+      certificateType: 'COURSE_COMPLETION',
+      createdAt: now,
+      updatedAt: now,
+      revokedAt: null,
+      revocationReason: null,
+    };
+
+    transaction.set(certRef, certDoc);
+    transaction.set(pubRef, publicCertDoc);
+
+    const auditRef = db.collection('auditLogs').doc();
+    transaction.set(auditRef, {
+      id: auditRef.id,
+      actorUserId: callerUid,
+      actorEmail: callerEmail,
+      actorRoles: callerRoles,
+      action: 'CERTIFICATE_ISSUED',
+      resourceType: 'certificates',
+      resourceId: certificateId,
+      timestamp: now,
+      metadata: {
+        certificateNumber: candidateNumber,
+        targetUserId,
+        courseId,
+        recipientName,
+        enforcedBy: 'SERVER_AUTHORITY',
+      },
+    });
+
+    return {
+      success: true,
+      certificateId,
+      certificateNumber: candidateNumber,
+    };
   });
 
-  // 6. Public verification record with zero PII
-  batch.set(publicCertRef, {
-    certificateNumber: certNumber,
-    recipientName,
-    courseTitle,
-    courseId,
-    issuedAt: now,
-    status: 'ACTIVE',
-    certificateType: 'COURSE_COMPLETION',
-    issuer: 'ZIRON Restart School - Virexon Biosciences Education Division',
-  });
-
-  // 7. Authoritative audit trail
-  const auditRef = db.collection('auditLogs').doc();
-  batch.set(auditRef, {
-    id: auditRef.id,
-    actorUserId: callerUid,
-    actorEmail: callerEmail,
-    actorRoles: callerRoles,
-    action: 'CERTIFICATE_ISSUED',
-    resourceType: 'certificates',
-    resourceId: certRef.id,
-    timestamp: now,
-    metadata: { certNumber, targetUserId, courseId, enforcedBy: 'SERVER_AUTHORITY' },
-  });
-
-  await batch.commit();
-
-  return { success: true, certificateId: certRef.id, certificateNumber: certNumber };
+  return result;
 });
 
 /**
@@ -3635,7 +3693,11 @@ export async function authoritativelyIssueCertificate(
   // Fast check: if certificate already exists, return it immediately (idempotent)
   const quickSnap = await certRef.get();
   if (quickSnap.exists) {
-    return quickSnap.data() as Record<string, unknown>;
+    const data = quickSnap.data() as Record<string, unknown>;
+    if (data.status === 'REVOKED' || data.isRevoked) {
+      throw new Error('This certificate has been revoked by institutional authority and cannot be reissued.');
+    }
+    return data;
   }
 
   // Pre-validate eligibility before transaction
@@ -3676,7 +3738,11 @@ export async function authoritativelyIssueCertificate(
     // Read deterministic certRef inside transaction
     const txCertSnap = await transaction.get(certRef);
     if (txCertSnap.exists) {
-      return txCertSnap.data() as Record<string, unknown>;
+      const data = txCertSnap.data() as Record<string, unknown>;
+      if (data.status === 'REVOKED' || data.isRevoked) {
+        throw new Error('This certificate has been revoked by institutional authority and cannot be reissued.');
+      }
+      return data;
     }
 
     // Generate cryptographic certificate number with collision check within transaction
