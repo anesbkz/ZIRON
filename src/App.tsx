@@ -30,6 +30,7 @@ import { ActivateProductPage } from '@/pages/app/ActivateProductPage';
 import { ProfilePage } from '@/pages/app/ProfilePage';
 import { AppCommunityPage } from '@/pages/app/AppCommunityPage';
 import { AppSchoolPage } from '@/pages/app/AppSchoolPage';
+import { AppRestartPage } from '@/pages/app/AppRestartPage';
 import { RewardsPage } from '@/pages/app/RewardsPage';
 import { CertificatesPage } from '@/pages/app/CertificatesPage';
 import { CustomerRouteGuard } from '@/components/guards/CustomerRouteGuard';
@@ -244,7 +245,28 @@ function RouterOutlet() {
       case 'app/school':
         appContent = (
           <CustomerRouteGuard>
-            <AppSchoolPage />
+            <AppSchoolPage initialView="dashboard" />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/school/courses':
+        appContent = (
+          <CustomerRouteGuard>
+            <AppSchoolPage initialView="catalog" />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/school/certificates':
+        appContent = (
+          <CustomerRouteGuard>
+            <CertificatesPage />
+          </CustomerRouteGuard>
+        );
+        break;
+      case 'app/restart':
+        appContent = (
+          <CustomerRouteGuard>
+            <AppRestartPage />
           </CustomerRouteGuard>
         );
         break;
@@ -271,11 +293,29 @@ function RouterOutlet() {
         break;
       case 'app':
       default:
-        appContent = (
-          <CustomerRouteGuard>
-            <DashboardPage />
-          </CustomerRouteGuard>
-        );
+        if (route.startsWith('app/school/courses/')) {
+          const coursePath = route.replace('app/school/courses/', '');
+          if (coursePath.endsWith('/learn')) {
+            const courseId = coursePath.replace('/learn', '');
+            appContent = (
+              <CustomerRouteGuard>
+                <AppSchoolPage initialView="player" initialCourseId={courseId} />
+              </CustomerRouteGuard>
+            );
+          } else {
+            appContent = (
+              <CustomerRouteGuard>
+                <AppSchoolPage initialView="detail" initialCourseId={coursePath} />
+              </CustomerRouteGuard>
+            );
+          }
+        } else {
+          appContent = (
+            <CustomerRouteGuard>
+              <DashboardPage />
+            </CustomerRouteGuard>
+          );
+        }
         break;
     }
 

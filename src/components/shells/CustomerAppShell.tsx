@@ -198,6 +198,21 @@ export const CustomerAppShell: React.FC<{ children: React.ReactNode }> = ({ chil
           </div>
 
           <div className="flex items-center gap-3">
+            {/* ZIRON RESTART Platform Hub */}
+            <button
+              id="customer-restart-hub-btn"
+              onClick={() => navigate('app/restart')}
+              className={`text-[10px] uppercase font-mono font-bold tracking-wider inline-flex items-center gap-1 cursor-pointer px-2 py-0.5 border transition-colors ${
+                route === 'app/restart'
+                  ? 'bg-amber-400 text-[#0B2346] border-amber-300 shadow-xs'
+                  : 'text-amber-200 hover:text-white border-amber-400/50 hover:border-amber-300 bg-amber-950/30'
+              }`}
+              title="ZIRON RESTART Platform"
+            >
+              <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+              <span>RESTART</span>
+            </button>
+
             {isStaff && (
               <button
                 onClick={() => navigate('admin')}

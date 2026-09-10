@@ -94,6 +94,30 @@ export const DEFAULT_SEED_CATEGORIES: Omit<SchoolCategory, 'id' | 'createdAt' | 
     isPublished: true,
   },
   {
+    slug: 'livestock',
+    title: { en: 'Livestock & Animal Husbandry', fr: 'Élevage & Soins Animaux', ar: 'تربية المواشي والإنتاج الحيواني' },
+    description: {
+      en: 'Veterinary hygiene, herd management, nutritional protocols, and biological resilience.',
+      fr: 'Hygiène vétérinaire, gestion des troupeaux, protocoles nutritionnels et résilience.',
+      ar: 'الصحة البيطرية، وإدارة القطعان، والبروتوكولات الغذائية، والمرونة البيولوجية.',
+    },
+    iconName: 'Activity',
+    displayOrder: 7,
+    isPublished: true,
+  },
+  {
+    slug: 'beekeeping',
+    title: { en: 'Beekeeping & Apiculture', fr: 'Apiculture & Systèmes Mellifères', ar: 'تربية النحل وعلم إنتاج العسل' },
+    description: {
+      en: 'Apiary installation, colony health diagnostics, honey extraction, and ecological pollination.',
+      fr: 'Installation de ruchers, diagnostic sanitaire des colonies, extraction et pollinisation.',
+      ar: 'إنشاء المناحل، وتشخيص صحة الخلايا، واستخلاص العسل، والتلقيح البيئي.',
+    },
+    iconName: 'Sun',
+    displayOrder: 8,
+    isPublished: true,
+  },
+  {
     slug: 'employment',
     title: { en: 'Professional Employment Readiness', fr: 'Préparation à l\'Emploi', ar: 'الجاهزية للتوظيف المهني' },
     description: {
@@ -102,7 +126,7 @@ export const DEFAULT_SEED_CATEGORIES: Omit<SchoolCategory, 'id' | 'createdAt' | 
       ar: 'التواصل المهني، واستراتيجيات المقابلات، والتنسيق في بيئة العمل.',
     },
     iconName: 'Briefcase',
-    displayOrder: 7,
+    displayOrder: 9,
     isPublished: true,
   },
   {
@@ -114,7 +138,7 @@ export const DEFAULT_SEED_CATEGORIES: Omit<SchoolCategory, 'id' | 'createdAt' | 
       ar: 'الثقافة المالية، وسلاسل التوريد التشغيلية، والحوكمة الإدارية.',
     },
     iconName: 'BarChart3',
-    displayOrder: 8,
+    displayOrder: 10,
     isPublished: true,
   },
 ];
@@ -329,6 +353,26 @@ export async function listAllCourses(includeUnpublished = false): Promise<School
   } catch (error) {
     console.warn('Error reading courses:', error);
     return includeUnpublished ? SEED_COURSES : SEED_COURSES.filter((c) => c.isPublished);
+  }
+}
+
+/**
+ * Fetch a single course by its ID or slug.
+ */
+export async function getCourseById(courseId: string): Promise<SchoolCourse | null> {
+  if (!courseId) return null;
+  try {
+    const courseRef = doc(db, COURSES_COLLECTION, courseId);
+    const snap = await getDoc(courseRef);
+    if (snap.exists()) {
+      return { id: snap.id, ...(snap.data() as Omit<SchoolCourse, 'id'>) };
+    }
+    const seed = SEED_COURSES.find((c) => c.id === courseId || c.slug === courseId);
+    return seed || null;
+  } catch (error) {
+    console.warn(`Error reading course ${courseId}:`, error);
+    const seed = SEED_COURSES.find((c) => c.id === courseId || c.slug === courseId);
+    return seed || null;
   }
 }
 
@@ -698,6 +742,20 @@ export async function getUserSchoolProgress(
   } catch (error) {
     console.warn('Error reading school progress:', error);
     return null;
+  }
+}
+
+/**
+ * Fetch all school progress records for a student.
+ */
+export async function listUserProgress(userId: string): Promise<SchoolProgress[]> {
+  try {
+    const q = query(collection(db, PROGRESS_COLLECTION), where('userId', '==', userId));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => d.data() as SchoolProgress);
+  } catch (error) {
+    console.warn('Error reading user progress list:', error);
+    return [];
   }
 }
 
