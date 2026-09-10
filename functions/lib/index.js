@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.completeSchoolLesson = exports.enrollInCourse = exports.deleteSchoolLesson = exports.updateSchoolLesson = exports.createSchoolLesson = exports.deleteSchoolModule = exports.updateSchoolModule = exports.createSchoolModule = exports.getSchoolAccessStatus = exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.updateBatchStatus = exports.createProductBatch = exports.generateProductCodes = exports.activateContainerCode = exports.verifyContainerCode = exports.CROCKFORD_ALPHABET = exports.CANONICAL_CATALOG_SKUS = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = exports.FIRESTORE_DATABASE_ID = void 0;
+exports.seedInitialRewards = exports.createCommunityComment = exports.createCommunityPost = exports.completeJourneyDay = exports.redeemReward = exports.verifyCertificate = exports.revokeCertificate = exports.issueCourseCertificate = exports.completeSchoolLesson = exports.enrollInCourse = exports.deleteSchoolLesson = exports.updateSchoolLesson = exports.createSchoolLesson = exports.deleteSchoolModule = exports.updateSchoolModule = exports.createSchoolModule = exports.getSchoolAccessStatus = exports.deleteCommunityAnnouncement = exports.updateCommunityAnnouncement = exports.deleteSchoolCourse = exports.updateSchoolCourse = exports.createSchoolCourse = exports.deleteSchoolCategory = exports.updateSchoolCategory = exports.createSchoolCategory = exports.updateCmsSection = exports.grantEntitlement = exports.updateUserStatus = exports.resolveCommunityReport = exports.moderateCommunityPost = exports.createCommunityAnnouncement = exports.issueCertificate = exports.togglePostLike = exports.updateBatchStatus = exports.createProductBatch = exports.generateProductCodes = exports.activateContainerCode = exports.verifyContainerCode = exports.CROCKFORD_ALPHABET = exports.CANONICAL_CATALOG_SKUS = exports.assignUserRoles = exports.initializeBootstrapGovernance = exports.CANONICAL_APP_ROLES = exports.FIRESTORE_DATABASE_ID = void 0;
 exports.getBootstrapSuperAdminEmail = getBootstrapSuperAdminEmail;
 exports.isBootstrapModeAuthorized = isBootstrapModeAuthorized;
 exports.checkIsSuperAdmin = checkIsSuperAdmin;
@@ -9,10 +9,13 @@ exports.normalizeProductCode = normalizeProductCode;
 exports.generateCrockfordSegment = generateCrockfordSegment;
 exports.generateSecureProductCode = generateSecureProductCode;
 exports.checkUserSchoolAccess = checkUserSchoolAccess;
+exports.generateCertificateNumber = generateCertificateNumber;
+exports.authoritativelyIssueCertificate = authoritativelyIssueCertificate;
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const firestore_1 = require("firebase-admin/firestore");
 const crypto = require("crypto");
+const gamification_1 = require("./gamification");
 admin.initializeApp();
 /**
  * Authoritative Named Firestore Database
@@ -494,12 +497,19 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
         const userSnap = await transaction.get(userDocRef);
         const userData = userSnap.exists ? userSnap.data() : null;
         const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
-        const awardedXp = 50;
+        const awardedXp = gamification_1.XP_VALUES.PRODUCT_ACTIVATED; // 50 XP
         const totalXp = currentXp + awardedXp;
-        const level = Math.floor(totalXp / 100) + 1;
+        const levelProgress = (0, gamification_1.calculateLevel)(totalXp);
+        const level = levelProgress.currentLevel;
         const now = new Date().toISOString();
+        const today = now.slice(0, 10);
         const productSku = codeData.productSku || 'VIR-CONTAINER-DEFAULT';
         const activationDocRef = db.collection('activations').doc();
+        // Streak calculation
+        const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+        const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+        const lastActivityDate = userData?.lastActivityDate || null;
+        const streakUpdate = (0, gamification_1.calculateStreakUpdate)(currentStreak, longestStreak, lastActivityDate, today);
         // 1. Mark code as activated (permanently bound to callerUid)
         transaction.update(codeDocRef, {
             status: 'ACTIVATED',
@@ -568,16 +578,126 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
                 qualifyingContainerCount,
             }, { merge: true });
         }
-        // 6. Update user profile quick access flags and reward/XP state
+        // 6. Record immutable XP ledger transaction
+        const xpTxRef = db.collection('xpTransactions').doc(`xp_act_${activationDocRef.id}`);
+        transaction.set(xpTxRef, {
+            id: xpTxRef.id,
+            userId: callerUid,
+            amount: awardedXp,
+            type: 'EARNED',
+            source: 'PRODUCT_ACTIVATED',
+            sourceId: activationDocRef.id,
+            createdAt: now,
+            metadata: {
+                code: codeData.code || rawCode,
+                productSku,
+                qualifyingContainerCount,
+            },
+        });
+        // 7. Deterministic Milestones & Badges
+        const milestoneFirstProdRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_PRODUCT`);
+        transaction.set(milestoneFirstProdRef, {
+            id: `${callerUid}_FIRST_PRODUCT`,
+            userId: callerUid,
+            milestoneKey: 'FIRST_PRODUCT',
+            title: gamification_1.MILESTONES.FIRST_PRODUCT.title,
+            description: gamification_1.MILESTONES.FIRST_PRODUCT.description,
+            achievedAt: now,
+        }, { merge: true });
+        const badgeFirstStepRef = db.collection('userBadges').doc(`${callerUid}_FIRST_STEP`);
+        transaction.set(badgeFirstStepRef, {
+            id: `${callerUid}_FIRST_STEP`,
+            userId: callerUid,
+            badgeKey: 'FIRST_STEP',
+            name: gamification_1.BADGES.FIRST_STEP.name,
+            description: gamification_1.BADGES.FIRST_STEP.description,
+            icon: gamification_1.BADGES.FIRST_STEP.icon,
+            requirement: gamification_1.BADGES.FIRST_STEP.requirement,
+            awardedAt: now,
+        }, { merge: true });
+        if (qualifyingContainerCount >= 3) {
+            const milestoneThreeRef = db.collection('userMilestones').doc(`${callerUid}_THREE_PRODUCTS`);
+            transaction.set(milestoneThreeRef, {
+                id: `${callerUid}_THREE_PRODUCTS`,
+                userId: callerUid,
+                milestoneKey: 'THREE_PRODUCTS',
+                title: gamification_1.MILESTONES.THREE_PRODUCTS.title,
+                description: gamification_1.MILESTONES.THREE_PRODUCTS.description,
+                achievedAt: now,
+            }, { merge: true });
+        }
+        if (qualifiesForSchool) {
+            const milestoneSchoolRef = db.collection('userMilestones').doc(`${callerUid}_SCHOOL_UNLOCKED`);
+            transaction.set(milestoneSchoolRef, {
+                id: `${callerUid}_SCHOOL_UNLOCKED`,
+                userId: callerUid,
+                milestoneKey: 'SCHOOL_UNLOCKED',
+                title: gamification_1.MILESTONES.SCHOOL_UNLOCKED.title,
+                description: gamification_1.MILESTONES.SCHOOL_UNLOCKED.description,
+                achievedAt: now,
+            }, { merge: true });
+            const badgeSchoolRef = db.collection('userBadges').doc(`${callerUid}_SCHOOL_READY`);
+            transaction.set(badgeSchoolRef, {
+                id: `${callerUid}_SCHOOL_READY`,
+                userId: callerUid,
+                badgeKey: 'SCHOOL_READY',
+                name: gamification_1.BADGES.SCHOOL_READY.name,
+                description: gamification_1.BADGES.SCHOOL_READY.description,
+                icon: gamification_1.BADGES.SCHOOL_READY.icon,
+                requirement: gamification_1.BADGES.SCHOOL_READY.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        if (streakUpdate.currentStreak >= 7) {
+            const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+            transaction.set(badgeCommittedRef, {
+                id: `${callerUid}_COMMITTED`,
+                userId: callerUid,
+                badgeKey: 'COMMITTED',
+                name: gamification_1.BADGES.COMMITTED.name,
+                description: gamification_1.BADGES.COMMITTED.description,
+                icon: gamification_1.BADGES.COMMITTED.icon,
+                requirement: gamification_1.BADGES.COMMITTED.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        if (streakUpdate.currentStreak >= 30) {
+            const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+            transaction.set(badgeDiscRef, {
+                id: `${callerUid}_DISCIPLINED`,
+                userId: callerUid,
+                badgeKey: 'DISCIPLINED',
+                name: gamification_1.BADGES.DISCIPLINED.name,
+                description: gamification_1.BADGES.DISCIPLINED.description,
+                icon: gamification_1.BADGES.DISCIPLINED.icon,
+                requirement: gamification_1.BADGES.DISCIPLINED.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        // 8. Update user profile quick access flags and reward/XP state
         transaction.set(userDocRef, {
             communityAccess: true,
             schoolAccess: qualifiesForSchool,
             qualifyingContainerCount,
             xp: totalXp,
             level,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
             updatedAt: now,
         }, { merge: true });
-        // 7. Authoritative activation audit log
+        // 9. Sync userGamification document
+        const gamificationRef = db.collection('userGamification').doc(callerUid);
+        transaction.set(gamificationRef, {
+            userId: callerUid,
+            xp: totalXp,
+            level,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        // 10. Authoritative activation audit log
         const auditDocRef = db.collection('auditLogs').doc();
         transaction.set(auditDocRef, {
             id: auditDocRef.id,
@@ -599,6 +719,8 @@ exports.activateContainerCode = functions.https.onCall(async (data, context) => 
                 xpAwarded: awardedXp,
                 totalXp,
                 level,
+                currentStreak: streakUpdate.currentStreak,
+                longestStreak: streakUpdate.longestStreak,
                 enforcedBy: 'SERVER_TRANSACTION',
             },
         });
@@ -983,35 +1105,43 @@ exports.issueCertificate = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('already-exists', `A valid certificate has already been issued to student "${targetUserId}" for course "${courseId}".`);
     }
     const now = new Date().toISOString();
-    // Collision-safe certificate number generation
-    const certNumber = `VIR-CERT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    // Cryptographically secure collision-safe certificate number generation
+    const certNumber = generateCertificateNumber();
     // 4. Collision check
     const publicCertRef = db.collection('publicCertificates').doc(certNumber);
     const existingPublic = await publicCertRef.get();
     if (existingPublic.exists) {
         throw new functions.https.HttpsError('already-exists', 'A certificate with this number already exists. Please retry.');
     }
-    const certRef = db.collection('certificates').doc();
+    const certificateId = `cert_${targetUserId}_${courseId}`;
+    const certRef = db.collection('certificates').doc(certificateId);
     const batch = db.batch();
     // 5. Full private record (includes targetUserId and student details)
     batch.set(certRef, {
-        id: certRef.id,
+        id: certificateId,
+        certificateId,
         certificateNumber: certNumber,
         userId: targetUserId,
         recipientName,
         courseId,
         courseTitle,
         issuedAt: now,
+        issueDate: now,
         issuedByUid: callerUid,
-        status: 'VALID',
+        status: 'ACTIVE',
+        isRevoked: false,
+        certificateType: 'COURSE_COMPLETION',
     });
     // 6. Public verification record with zero PII
     batch.set(publicCertRef, {
         certificateNumber: certNumber,
         recipientName,
         courseTitle,
+        courseId,
         issuedAt: now,
-        status: 'VALID',
+        status: 'ACTIVE',
+        certificateType: 'COURSE_COMPLETION',
+        issuer: 'ZIRON Restart School - Virexon Biosciences Education Division',
     });
     // 7. Authoritative audit trail
     const auditRef = db.collection('auditLogs').doc();
@@ -2539,7 +2669,12 @@ exports.completeSchoolLesson = functions.https.onCall(async (data, context) => {
     const progressId = `${callerUid}_${courseId}`;
     const progressRef = db.collection('schoolProgress').doc(progressId);
     const enrollmentRef = db.collection('enrollments').doc(progressId);
-    const [progressSnap, enrollmentSnap] = await Promise.all([progressRef.get(), enrollmentRef.get()]);
+    const userDocRef = db.collection('users').doc(callerUid);
+    const [progressSnap, enrollmentSnap, freshUserSnap] = await Promise.all([
+        progressRef.get(),
+        enrollmentRef.get(),
+        userDocRef.get(),
+    ]);
     const existingCompletedIds = progressSnap.exists
         ? progressSnap.data()?.completedLessonIds || []
         : [];
@@ -2552,7 +2687,143 @@ exports.completeSchoolLesson = functions.https.onCall(async (data, context) => {
         : 100;
     const isCompleted = progressPercent >= 100;
     const now = new Date().toISOString();
+    const today = now.slice(0, 10);
     const batch = db.batch();
+    // Gamification & XP Awarding
+    const freshUserData = freshUserSnap.exists ? freshUserSnap.data() : null;
+    const currentXp = typeof freshUserData?.xp === 'number' ? freshUserData.xp : 0;
+    let totalAwardedXp = 0;
+    const isNewLessonCompletion = !existingCompletedIds.includes(lessonId);
+    const wasCourseCompleted = progressSnap.exists && progressSnap.data()?.isCompleted === true;
+    const isNewCourseCompletion = isCompleted && !wasCourseCompleted;
+    if (isNewLessonCompletion) {
+        const lessonXp = gamification_1.XP_VALUES.SCHOOL_LESSON_COMPLETED; // 15 XP
+        totalAwardedXp += lessonXp;
+        const lessonXpTxRef = db.collection('xpTransactions').doc(`xp_lesson_${callerUid}_${courseId}_${lessonId}`);
+        batch.set(lessonXpTxRef, {
+            id: lessonXpTxRef.id,
+            userId: callerUid,
+            amount: lessonXp,
+            type: 'EARNED',
+            source: 'SCHOOL_LESSON_COMPLETED',
+            sourceId: `${courseId}_${lessonId}`,
+            createdAt: now,
+            metadata: { courseId, lessonId },
+        });
+        const milestoneFirstLessonRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_LESSON`);
+        batch.set(milestoneFirstLessonRef, {
+            id: `${callerUid}_FIRST_LESSON`,
+            userId: callerUid,
+            milestoneKey: 'FIRST_LESSON',
+            title: gamification_1.MILESTONES.FIRST_LESSON.title,
+            description: gamification_1.MILESTONES.FIRST_LESSON.description,
+            achievedAt: now,
+        }, { merge: true });
+    }
+    if (isNewCourseCompletion) {
+        const courseXp = gamification_1.XP_VALUES.SCHOOL_COURSE_COMPLETED; // 250 XP
+        totalAwardedXp += courseXp;
+        const courseXpTxRef = db.collection('xpTransactions').doc(`xp_course_${callerUid}_${courseId}`);
+        batch.set(courseXpTxRef, {
+            id: courseXpTxRef.id,
+            userId: callerUid,
+            amount: courseXp,
+            type: 'EARNED',
+            source: 'SCHOOL_COURSE_COMPLETED',
+            sourceId: courseId,
+            createdAt: now,
+            metadata: { courseId },
+        });
+        const milestoneCourseRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_COURSE_COMPLETED`);
+        batch.set(milestoneCourseRef, {
+            id: `${callerUid}_FIRST_COURSE_COMPLETED`,
+            userId: callerUid,
+            milestoneKey: 'FIRST_COURSE_COMPLETED',
+            title: gamification_1.MILESTONES.FIRST_COURSE_COMPLETED.title,
+            description: gamification_1.MILESTONES.FIRST_COURSE_COMPLETED.description,
+            achievedAt: now,
+        }, { merge: true });
+        const badgeLearnerRef = db.collection('userBadges').doc(`${callerUid}_LEARNER`);
+        batch.set(badgeLearnerRef, {
+            id: `${callerUid}_LEARNER`,
+            userId: callerUid,
+            badgeKey: 'LEARNER',
+            name: gamification_1.BADGES.LEARNER.name,
+            description: gamification_1.BADGES.LEARNER.description,
+            icon: gamification_1.BADGES.LEARNER.icon,
+            requirement: gamification_1.BADGES.LEARNER.requirement,
+            awardedAt: now,
+        }, { merge: true });
+        const completedCoursesSnap = await db.collection('schoolProgress')
+            .where('userId', '==', callerUid)
+            .where('isCompleted', '==', true)
+            .get();
+        const totalCompleted = completedCoursesSnap.docs.filter((d) => d.id !== progressId).length + 1;
+        if (totalCompleted >= 3) {
+            const badgeScholarRef = db.collection('userBadges').doc(`${callerUid}_SCHOLAR`);
+            batch.set(badgeScholarRef, {
+                id: `${callerUid}_SCHOLAR`,
+                userId: callerUid,
+                badgeKey: 'SCHOLAR',
+                name: gamification_1.BADGES.SCHOLAR.name,
+                description: gamification_1.BADGES.SCHOLAR.description,
+                icon: gamification_1.BADGES.SCHOLAR.icon,
+                requirement: gamification_1.BADGES.SCHOLAR.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+    }
+    // Streak update on lesson completion
+    const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+    const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+    const lastActivityDate = userData?.lastActivityDate || null;
+    const streakUpdate = (0, gamification_1.calculateStreakUpdate)(currentStreak, longestStreak, lastActivityDate, today);
+    if (streakUpdate.currentStreak >= 7) {
+        const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+        batch.set(badgeCommittedRef, {
+            id: `${callerUid}_COMMITTED`,
+            userId: callerUid,
+            badgeKey: 'COMMITTED',
+            name: gamification_1.BADGES.COMMITTED.name,
+            description: gamification_1.BADGES.COMMITTED.description,
+            icon: gamification_1.BADGES.COMMITTED.icon,
+            requirement: gamification_1.BADGES.COMMITTED.requirement,
+            awardedAt: now,
+        }, { merge: true });
+    }
+    if (streakUpdate.currentStreak >= 30) {
+        const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+        batch.set(badgeDiscRef, {
+            id: `${callerUid}_DISCIPLINED`,
+            userId: callerUid,
+            badgeKey: 'DISCIPLINED',
+            name: gamification_1.BADGES.DISCIPLINED.name,
+            description: gamification_1.BADGES.DISCIPLINED.description,
+            icon: gamification_1.BADGES.DISCIPLINED.icon,
+            requirement: gamification_1.BADGES.DISCIPLINED.requirement,
+            awardedAt: now,
+        }, { merge: true });
+    }
+    const newTotalXp = currentXp + totalAwardedXp;
+    const newLevel = (0, gamification_1.calculateLevel)(newTotalXp).currentLevel;
+    batch.set(userDocRef, {
+        xp: newTotalXp,
+        level: newLevel,
+        currentStreak: streakUpdate.currentStreak,
+        longestStreak: streakUpdate.longestStreak,
+        lastActivityDate: today,
+        updatedAt: now,
+    }, { merge: true });
+    const gamificationRef = db.collection('userGamification').doc(callerUid);
+    batch.set(gamificationRef, {
+        userId: callerUid,
+        xp: newTotalXp,
+        level: newLevel,
+        currentStreak: streakUpdate.currentStreak,
+        longestStreak: streakUpdate.longestStreak,
+        lastActivityDate: today,
+        updatedAt: now,
+    }, { merge: true });
     // Progress update
     const progressDoc = {
         id: progressId,
@@ -2611,6 +2882,32 @@ exports.completeSchoolLesson = functions.https.onCall(async (data, context) => {
         },
     });
     await batch.commit();
+    // Authoritative automatic certificate issuance upon 100% curriculum completion
+    let issuedCertificate = null;
+    let certIssuanceError = null;
+    let certificateStatus = 'NOT_APPLICABLE';
+    if (isCompleted) {
+        try {
+            issuedCertificate = await authoritativelyIssueCertificate(callerUid, courseId, progressDoc.completedAt || now, callerEmail, roles);
+            certificateStatus = 'ISSUED';
+            await progressRef.update({
+                certificateStatus: 'ISSUED',
+                certificateId: issuedCertificate.id || `cert_${callerUid}_${courseId}`,
+                certificateNumber: issuedCertificate.certificateNumber,
+                updatedAt: now,
+            });
+        }
+        catch (certError) {
+            console.error('Authoritative automatic certificate issuance deferred/failed in completeSchoolLesson:', certError);
+            certIssuanceError = certError instanceof Error ? certError.message : 'Certificate issuance deferred for reconciliation.';
+            certificateStatus = 'PENDING_RECONCILIATION';
+            await progressRef.update({
+                certificateStatus: 'PENDING_RECONCILIATION',
+                certificateError: certIssuanceError,
+                updatedAt: now,
+            });
+        }
+    }
     return {
         success: true,
         courseId,
@@ -2620,6 +2917,956 @@ exports.completeSchoolLesson = functions.https.onCall(async (data, context) => {
         totalLessonsCount: effectiveTotalLessons,
         isCompleted,
         completedAt: progressDoc.completedAt,
+        xpAwarded: totalAwardedXp,
+        totalXp: newTotalXp,
+        level: newLevel,
+        certificate: issuedCertificate,
+        certificateStatus,
+        certificateError: certIssuanceError,
     };
+});
+/* ==========================================================================
+   PHASE 7: AUTHORITATIVE CERTIFICATES & CREDENTIALS
+   ========================================================================== */
+/**
+ * Generates a unique, non-predictable, human-readable certificate number.
+ * Format: ZRN-CERT-YYYY-XXXX-XXXX
+ * Uses cryptographic randomness (crypto.randomBytes) and Crockford Base32 characters
+ * (eliminates confusing glyphs like I, L, O, U) with zero modulo bias (256 % 32 == 0).
+ */
+const CERT_CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+function generateCertificateNumber(year = new Date().getFullYear()) {
+    const bytes = crypto.randomBytes(8);
+    let seg1 = '';
+    let seg2 = '';
+    for (let i = 0; i < 4; i++) {
+        seg1 += CERT_CROCKFORD_ALPHABET.charAt(bytes[i] & 31);
+        seg2 += CERT_CROCKFORD_ALPHABET.charAt(bytes[i + 4] & 31);
+    }
+    return `ZRN-CERT-${year}-${seg1}-${seg2}`;
+}
+/**
+ * Authoritative Server-Side Helper: Issue a Course Completion Certificate.
+ * Strictly verifies prerequisites, enforces idempotency via Firestore transaction, prevents duplicate
+ * certificates, and maintains immutable audit logs and privacy-minimized public verification projection.
+ */
+async function authoritativelyIssueCertificate(userId, courseId, completedAt, actorEmail = '', actorRoles = []) {
+    const certificateId = `cert_${userId}_${courseId}`;
+    const certRef = db.collection('certificates').doc(certificateId);
+    // Fast check: if certificate already exists, return it immediately (idempotent)
+    const quickSnap = await certRef.get();
+    if (quickSnap.exists) {
+        return quickSnap.data();
+    }
+    // Pre-validate eligibility before transaction
+    const access = await checkUserSchoolAccess(userId, actorRoles, actorEmail, false);
+    if (!access.hasAccess) {
+        throw new Error('School eligibility requirement not met: 3 unique activated containers are required.');
+    }
+    // Load recipient and course data
+    const [userSnap, courseSnap] = await Promise.all([
+        db.collection('users').doc(userId).get(),
+        db.collection('schoolCourses').doc(courseId).get(),
+    ]);
+    const userData = userSnap.exists ? userSnap.data() : null;
+    const courseData = courseSnap.exists ? courseSnap.data() : null;
+    const recipientName = userData?.displayName ||
+        (userData?.firstName && userData?.lastName
+            ? `${userData.firstName} ${userData.lastName}`.trim()
+            : 'ZIRON Scholar');
+    let courseTitle = 'ZIRON Restart Curriculum';
+    if (courseData?.title) {
+        if (typeof courseData.title === 'string') {
+            courseTitle = courseData.title;
+        }
+        else if (courseData.title.en) {
+            courseTitle = courseData.title.en;
+        }
+        else {
+            const firstLang = Object.values(courseData.title)[0];
+            if (typeof firstLang === 'string')
+                courseTitle = firstLang;
+        }
+    }
+    // Atomic Firestore Transaction guarantees true concurrency safety and idempotency
+    return await db.runTransaction(async (transaction) => {
+        // Read deterministic certRef inside transaction
+        const txCertSnap = await transaction.get(certRef);
+        if (txCertSnap.exists) {
+            return txCertSnap.data();
+        }
+        // Generate cryptographic certificate number with collision check within transaction
+        let candidateNumber = generateCertificateNumber();
+        let pubRef = db.collection('publicCertificates').doc(candidateNumber);
+        let pubSnap = await transaction.get(pubRef);
+        let collisionAttempts = 0;
+        while (pubSnap.exists && collisionAttempts < 5) {
+            candidateNumber = generateCertificateNumber();
+            pubRef = db.collection('publicCertificates').doc(candidateNumber);
+            pubSnap = await transaction.get(pubRef);
+            collisionAttempts++;
+        }
+        if (pubSnap.exists) {
+            throw new Error('Certificate number collision encountered. Transaction will retry.');
+        }
+        const verificationToken = crypto.randomBytes(32).toString('hex');
+        const now = new Date().toISOString();
+        const issuer = 'ZIRON Restart School - Virexon Biosciences Education Division';
+        const verificationUrl = `/verify/certificate?number=${candidateNumber}`;
+        const certDoc = {
+            id: certificateId,
+            certificateId,
+            certificateNumber: candidateNumber,
+            userId,
+            recipientName,
+            userDisplayName: recipientName,
+            courseId,
+            courseTitle,
+            issuedAt: now,
+            issueDate: now,
+            completedAt: completedAt || now,
+            issuer,
+            status: 'ACTIVE',
+            isRevoked: false,
+            verificationToken,
+            verificationHash: verificationToken,
+            verificationUrl,
+            certificateType: 'COURSE_COMPLETION',
+            createdAt: now,
+            updatedAt: now,
+            revokedAt: null,
+            revocationReason: null,
+            revokedBy: null,
+        };
+        // Safe public projection (no sensitive user data, no email, phone, user IDs, XP, streaks, or verificationToken)
+        const publicCertDoc = {
+            certificateNumber: candidateNumber,
+            status: 'ACTIVE',
+            courseTitle,
+            courseId,
+            recipientName,
+            completedAt: completedAt || now,
+            issuedAt: now,
+            issuer,
+            certificateType: 'COURSE_COMPLETION',
+            createdAt: now,
+            updatedAt: now,
+            revokedAt: null,
+            revocationReason: null,
+        };
+        transaction.set(certRef, certDoc);
+        transaction.set(pubRef, publicCertDoc);
+        const auditRef = db.collection('auditLogs').doc();
+        transaction.set(auditRef, {
+            id: auditRef.id,
+            actorUserId: userId,
+            actorEmail: actorEmail || null,
+            actorRoles: actorRoles.length > 0 ? actorRoles : ['CUSTOMER'],
+            action: 'CERTIFICATE_ISSUED',
+            resourceType: 'certificates',
+            resourceId: certificateId,
+            timestamp: now,
+            metadata: {
+                certificateNumber: candidateNumber,
+                courseId,
+                recipientName,
+                completedAt: completedAt || now,
+                enforcedBy: 'SERVER_AUTHORITY',
+            },
+        });
+        return certDoc;
+    });
+}
+/**
+ * Callable Function: Authoritatively Issue Course Certificate
+ * Allows explicit claim / idempotent issuance verification by authenticated enrolled students.
+ */
+exports.issueCourseCertificate = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required to claim certificate.');
+    }
+    const callerUid = context.auth.uid;
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const { courseId } = data || {};
+    if (!courseId || typeof courseId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid courseId is required.');
+    }
+    const userSnap = await db.collection('users').doc(callerUid).get();
+    if (!userSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'User profile not found.');
+    }
+    const roles = userSnap.data()?.roles || [];
+    // Check School access entitlement
+    const access = await checkUserSchoolAccess(callerUid, roles, callerEmail, isEmailVerified);
+    if (!access.hasAccess) {
+        throw new functions.https.HttpsError('permission-denied', 'School access is unlocked by 3 verified product containers.');
+    }
+    // Check legitimate enrollment
+    const enrollmentRef = db.collection('enrollments').doc(`${callerUid}_${courseId}`);
+    const enrollmentSnap = await enrollmentRef.get();
+    if (!enrollmentSnap.exists) {
+        throw new functions.https.HttpsError('failed-precondition', 'You are not enrolled in this course.');
+    }
+    // Check curriculum completion
+    const lessonsSnap = await db.collection('schoolLessons')
+        .where('courseId', '==', courseId)
+        .where('isPublished', '==', true)
+        .get();
+    if (lessonsSnap.empty) {
+        throw new functions.https.HttpsError('failed-precondition', 'Curriculum has no published lessons.');
+    }
+    const progressRef = db.collection('schoolProgress').doc(`${callerUid}_${courseId}`);
+    const progressSnap = await progressRef.get();
+    if (!progressSnap.exists) {
+        throw new functions.https.HttpsError('failed-precondition', 'No progress recorded for this course.');
+    }
+    const progressData = progressSnap.data();
+    const completedIds = new Set(progressData.completedLessonIds || []);
+    const allLessonsCompleted = lessonsSnap.docs.every((d) => completedIds.has(d.id));
+    if (!allLessonsCompleted || progressData.progressPercent < 100) {
+        throw new functions.https.HttpsError('failed-precondition', 'Authoritative course completion required. Every required lesson must be completed before certificate issuance.');
+    }
+    // Check if certificate already exists and has been revoked
+    const certId = `cert_${callerUid}_${courseId}`;
+    const existingCertSnap = await db.collection('certificates').doc(certId).get();
+    if (existingCertSnap.exists) {
+        const existingData = existingCertSnap.data();
+        if (existingData.status === 'REVOKED' || existingData.isRevoked) {
+            throw new functions.https.HttpsError('failed-precondition', 'This certificate has been revoked by institutional authority and cannot be reissued.');
+        }
+    }
+    const certificate = await authoritativelyIssueCertificate(callerUid, courseId, progressData.completedAt || new Date().toISOString(), callerEmail, roles);
+    return {
+        success: true,
+        certificate,
+    };
+});
+/**
+ * Callable Function: Authoritatively Revoke Certificate
+ * Administrative action with required audit reasoning. Idempotent on repeated calls.
+ */
+exports.revokeCertificate = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required.');
+    }
+    const callerUid = context.auth.uid;
+    const callerEmail = context.auth.token.email || '';
+    const isEmailVerified = context.auth.token.email_verified === true;
+    const callerSnap = await db.collection('users').doc(callerUid).get();
+    if (!callerSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Caller profile not found.');
+    }
+    const callerData = callerSnap.data();
+    const callerRoles = callerData.roles || [];
+    const isSuperAdmin = await checkIsSuperAdmin(callerUid, callerRoles, callerEmail, isEmailVerified);
+    const isAuthorized = isSuperAdmin ||
+        callerRoles.includes('ADMIN') ||
+        callerRoles.includes('SCHOOL_MANAGER');
+    if (!isAuthorized) {
+        throw new functions.https.HttpsError('permission-denied', 'Administrative authority required to revoke educational certificates.');
+    }
+    const { certificateId, reason } = data || {};
+    if (!certificateId || typeof certificateId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'Valid certificateId is required.');
+    }
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'An auditable revocation reason is required.');
+    }
+    const certRef = db.collection('certificates').doc(certificateId);
+    const certSnap = await certRef.get();
+    if (!certSnap.exists) {
+        throw new functions.https.HttpsError('not-found', `Certificate "${certificateId}" not found.`);
+    }
+    const certData = certSnap.data();
+    const certificateNumber = certData.certificateNumber;
+    const now = new Date().toISOString();
+    // Idempotency: if already revoked, return status cleanly without redundant writes
+    if (certData.status === 'REVOKED' || certData.isRevoked) {
+        return {
+            success: true,
+            certificateId,
+            certificateNumber,
+            status: 'REVOKED',
+            revokedAt: certData.revokedAt || now,
+            alreadyRevoked: true,
+        };
+    }
+    const batch = db.batch();
+    batch.update(certRef, {
+        status: 'REVOKED',
+        isRevoked: true,
+        revokedAt: now,
+        revocationReason: reason.trim(),
+        revokedBy: callerUid,
+        updatedAt: now,
+    });
+    if (certificateNumber) {
+        const pubCertRef = db.collection('publicCertificates').doc(certificateNumber);
+        batch.set(pubCertRef, {
+            status: 'REVOKED',
+            revokedAt: now,
+            revocationReason: reason.trim(),
+            updatedAt: now,
+        }, { merge: true });
+    }
+    const auditRef = db.collection('auditLogs').doc();
+    batch.set(auditRef, {
+        id: auditRef.id,
+        actorUserId: callerUid,
+        actorEmail: callerEmail,
+        actorRoles: callerRoles,
+        action: 'CERTIFICATE_REVOKED',
+        resourceType: 'certificates',
+        resourceId: certificateId,
+        timestamp: now,
+        metadata: {
+            certificateNumber,
+            courseId: certData.courseId,
+            recipientUserId: certData.userId,
+            reason: reason.trim(),
+            enforcedBy: 'SERVER_AUTHORITY',
+        },
+    });
+    await batch.commit();
+    return {
+        success: true,
+        certificateId,
+        certificateNumber,
+        status: 'REVOKED',
+        revokedAt: now,
+    };
+});
+/**
+ * Callable Function: Public Certificate Verification
+ * Resolves safe public verification information from non-enumerable records.
+ */
+exports.verifyCertificate = functions.https.onCall(async (data) => {
+    const { identifier } = data || {};
+    if (!identifier || typeof identifier !== 'string' || identifier.trim().length === 0) {
+        return {
+            isValid: false,
+            message: 'Certificate number or verification token is required.',
+        };
+    }
+    const clean = identifier.trim();
+    // 1. Direct lookup by certificateNumber (e.g. ZRN-CERT-...)
+    let pubDoc = await db.collection('publicCertificates').doc(clean.toUpperCase()).get();
+    // 2. Fallback lookup by private verificationToken (if presented by holder via QR or direct link)
+    if (!pubDoc.exists) {
+        const tokenQuery = await db.collection('certificates')
+            .where('verificationToken', '==', clean)
+            .limit(1)
+            .get();
+        if (!tokenQuery.empty) {
+            const privateData = tokenQuery.docs[0].data();
+            const certNum = privateData.certificateNumber;
+            if (certNum) {
+                pubDoc = await db.collection('publicCertificates').doc(certNum).get();
+            }
+        }
+    }
+    // Not found: uninformative error that cannot be used for user enumeration or oracle attacks
+    if (!pubDoc.exists) {
+        return {
+            isValid: false,
+            message: 'No certificate matching this identifier was found in the official registry.',
+        };
+    }
+    const d = pubDoc.data();
+    const isRevoked = d.status === 'REVOKED';
+    return {
+        isValid: true,
+        status: isRevoked ? 'REVOKED' : 'ACTIVE',
+        isRevoked,
+        certificateNumber: d.certificateNumber,
+        recipientName: d.recipientName,
+        courseTitle: d.courseTitle,
+        courseId: d.courseId,
+        issuer: d.issuer || 'ZIRON Restart School - Virexon Biosciences Education Division',
+        issuedAt: d.issuedAt,
+        completedAt: d.completedAt,
+        certificateType: d.certificateType || 'COURSE_COMPLETION',
+        revokedAt: isRevoked ? (d.revokedAt || null) : null,
+        revocationReason: isRevoked ? (d.revocationReason || 'Administrative Compliance Review') : null,
+        educationalDisclaimer: 'Certificates issued by ZIRON Restart School are educational completion credentials only. They do not certify medical treatment, addiction recovery, scientific claims, or clinical outcomes.',
+    };
+});
+/**
+ * =============================================================================
+ * AUTHORITATIVE GAMIFICATION & REWARDS CLOUD FUNCTIONS
+ * Server-authoritative engine for XP redemption, journey milestones, community XP,
+ * and seed catalogue.
+ * =============================================================================
+ */
+/**
+ * Redeem Reward via Authoritative Cloud Function.
+ * Atomic, transactional XP deduction and stock verification.
+ */
+exports.redeemReward = functions.https.onCall(async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication is required to redeem rewards.');
+    }
+    const { rewardId, idempotencyKey } = request.data || {};
+    if (!rewardId || typeof rewardId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'A valid rewardId string is required.');
+    }
+    const rewardDocRef = db.collection('rewards').doc(rewardId);
+    const userDocRef = db.collection('users').doc(callerUid);
+    const redemptionDocRef = db.collection('rewardRedemptions').doc(idempotencyKey && typeof idempotencyKey === 'string'
+        ? `${callerUid}_${idempotencyKey}`
+        : db.collection('rewardRedemptions').doc().id);
+    return await db.runTransaction(async (transaction) => {
+        // Check if already redeemed with this idempotency key
+        const existingRedemptionSnap = await transaction.get(redemptionDocRef);
+        if (existingRedemptionSnap.exists) {
+            const data = existingRedemptionSnap.data();
+            return {
+                success: true,
+                alreadyRedeemed: true,
+                redemptionId: redemptionDocRef.id,
+                rewardTitle: data?.rewardTitle || 'Reward',
+                remainingXp: data?.remainingXp || 0,
+            };
+        }
+        const [rewardSnap, userSnap] = await Promise.all([
+            transaction.get(rewardDocRef),
+            transaction.get(userDocRef),
+        ]);
+        if (!rewardSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'The requested reward does not exist.');
+        }
+        const rewardData = rewardSnap.data();
+        if (!rewardData?.isActive) {
+            throw new functions.https.HttpsError('failed-precondition', 'This reward is not currently active.');
+        }
+        if (rewardData.stock !== null && typeof rewardData.stock === 'number' && rewardData.stock <= 0) {
+            throw new functions.https.HttpsError('resource-exhausted', 'This reward is currently out of stock.');
+        }
+        if (!userSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'User profile not found.');
+        }
+        const userData = userSnap.data();
+        const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+        const xpCost = typeof rewardData.xpCost === 'number' ? rewardData.xpCost : 0;
+        if (currentXp < xpCost) {
+            throw new functions.https.HttpsError('failed-precondition', `Insufficient XP balance. You have ${currentXp} XP, but this reward requires ${xpCost} XP.`);
+        }
+        const remainingXp = currentXp - xpCost;
+        const newLevel = (0, gamification_1.calculateLevel)(remainingXp).currentLevel;
+        const now = new Date().toISOString();
+        // 1. Decrement user XP
+        transaction.update(userDocRef, {
+            xp: remainingXp,
+            level: newLevel,
+            updatedAt: now,
+        });
+        // 2. Decrement stock if finite
+        if (rewardData.stock !== null && typeof rewardData.stock === 'number') {
+            transaction.update(rewardDocRef, {
+                stock: admin.firestore.FieldValue.increment(-1),
+                updatedAt: now,
+            });
+        }
+        // 3. Create XP debit transaction in authoritative ledger
+        const xpTxRef = db.collection('xpTransactions').doc(`xp_redeem_${redemptionDocRef.id}`);
+        transaction.set(xpTxRef, {
+            id: xpTxRef.id,
+            userId: callerUid,
+            amount: -xpCost,
+            type: 'REDEEMED',
+            source: 'REWARD_REDEMPTION',
+            sourceId: rewardId,
+            createdAt: now,
+            metadata: {
+                rewardTitle: rewardData.title,
+                rewardType: rewardData.type,
+                xpCost,
+            },
+        });
+        // 4. Record authoritative redemption record
+        transaction.set(redemptionDocRef, {
+            id: redemptionDocRef.id,
+            userId: callerUid,
+            rewardId,
+            rewardTitle: rewardData.title,
+            xpCost,
+            status: 'COMPLETED',
+            createdAt: now,
+            metadata: {
+                rewardType: rewardData.type,
+                remainingXp,
+            },
+        });
+        // 5. Update userGamification snapshot
+        const gamificationRef = db.collection('userGamification').doc(callerUid);
+        transaction.set(gamificationRef, {
+            userId: callerUid,
+            xp: remainingXp,
+            level: newLevel,
+            updatedAt: now,
+        }, { merge: true });
+        // 6. Audit log
+        const auditDocRef = db.collection('auditLogs').doc();
+        transaction.set(auditDocRef, {
+            id: auditDocRef.id,
+            actorUserId: callerUid,
+            actorEmail: request.auth?.token.email || null,
+            actorRoles: request.auth?.token.roles || ['CUSTOMER'],
+            action: 'REWARD_REDEEMED',
+            resourceType: 'rewards',
+            resourceId: rewardId,
+            timestamp: now,
+            metadata: {
+                redemptionId: redemptionDocRef.id,
+                rewardTitle: rewardData.title,
+                xpCost,
+                remainingXp,
+            },
+        });
+        return {
+            success: true,
+            redemptionId: redemptionDocRef.id,
+            rewardTitle: rewardData.title,
+            remainingXp,
+        };
+    });
+});
+/**
+ * Complete a 90-Day Journey Protocol Day via Authoritative Cloud Function.
+ * Awards daily adherence XP (10 XP), evaluates milestones (Day 30 Phase 1, Day 90 Full Program),
+ * updates streak, and awards badges.
+ */
+exports.completeJourneyDay = functions.https.onCall(async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+    }
+    const { dayNumber, notes } = request.data || {};
+    const day = parseInt(dayNumber, 10);
+    if (isNaN(day) || day < 1 || day > 90) {
+        throw new functions.https.HttpsError('invalid-argument', 'dayNumber must be an integer between 1 and 90.');
+    }
+    const userDocRef = db.collection('users').doc(callerUid);
+    const journeyLogRef = db.collection('journeyLogs').doc(`${callerUid}_day_${day}`);
+    const xpTxDayRef = db.collection('xpTransactions').doc(`xp_journey_day_${callerUid}_${day}`);
+    return await db.runTransaction(async (transaction) => {
+        // Check if day already logged
+        const [userSnap, logSnap, xpSnap] = await Promise.all([
+            transaction.get(userDocRef),
+            transaction.get(journeyLogRef),
+            transaction.get(xpTxDayRef),
+        ]);
+        if (!userSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'User profile not found.');
+        }
+        const userData = userSnap.data();
+        const hasLinkedProduct = (typeof userData?.qualifyingContainerCount === 'number' && userData.qualifyingContainerCount > 0) ||
+            userData?.communityAccess === true;
+        if (!hasLinkedProduct) {
+            throw new functions.https.HttpsError('failed-precondition', 'You must activate at least one authentic ZIRON container to log protocol days.');
+        }
+        if (logSnap.exists || xpSnap.exists) {
+            return {
+                success: true,
+                alreadyCompleted: true,
+                dayNumber: day,
+                totalXp: userData?.xp || 0,
+                currentStreak: userData?.currentStreak || 0,
+            };
+        }
+        const now = new Date().toISOString();
+        const today = now.slice(0, 10);
+        const dayXp = gamification_1.XP_VALUES.JOURNEY_DAY_COMPLETED; // 10 XP
+        let totalAwardedXp = dayXp;
+        // 1. Record day adherence XP transaction
+        transaction.set(xpTxDayRef, {
+            id: xpTxDayRef.id,
+            userId: callerUid,
+            amount: dayXp,
+            type: 'EARNED',
+            source: 'JOURNEY_DAY_COMPLETED',
+            sourceId: `day_${day}`,
+            createdAt: now,
+            metadata: { dayNumber: day, notes: notes || null },
+        });
+        // 2. Record journey log doc
+        transaction.set(journeyLogRef, {
+            id: journeyLogRef.id,
+            userId: callerUid,
+            dayNumber: day,
+            notes: notes || null,
+            completedAt: now,
+        });
+        // 3. Phase 1 Milestone & XP (Day 30)
+        if (day === 30) {
+            const phaseXp = gamification_1.XP_VALUES.JOURNEY_PHASE_COMPLETED; // 100 XP
+            totalAwardedXp += phaseXp;
+            const phaseTxRef = db.collection('xpTransactions').doc(`xp_phase1_${callerUid}`);
+            transaction.set(phaseTxRef, {
+                id: phaseTxRef.id,
+                userId: callerUid,
+                amount: phaseXp,
+                type: 'EARNED',
+                source: 'JOURNEY_PHASE_COMPLETED',
+                sourceId: 'phase_1',
+                createdAt: now,
+                metadata: { phase: 1, dayNumber: 30 },
+            });
+            const milestonePhaseRef = db.collection('userMilestones').doc(`${callerUid}_FIRST_PHASE_COMPLETED`);
+            transaction.set(milestonePhaseRef, {
+                id: `${callerUid}_FIRST_PHASE_COMPLETED`,
+                userId: callerUid,
+                milestoneKey: 'FIRST_PHASE_COMPLETED',
+                title: gamification_1.MILESTONES.FIRST_PHASE_COMPLETED.title,
+                description: gamification_1.MILESTONES.FIRST_PHASE_COMPLETED.description,
+                achievedAt: now,
+            }, { merge: true });
+        }
+        // 4. Full 90-Day Milestone & Badge (Day 90)
+        if (day === 90) {
+            const milestone90Ref = db.collection('userMilestones').doc(`${callerUid}_FULL_90_DAY_PROGRAM`);
+            transaction.set(milestone90Ref, {
+                id: `${callerUid}_FULL_90_DAY_PROGRAM`,
+                userId: callerUid,
+                milestoneKey: 'FULL_90_DAY_PROGRAM',
+                title: gamification_1.MILESTONES.FULL_90_DAY_PROGRAM.title,
+                description: gamification_1.MILESTONES.FULL_90_DAY_PROGRAM.description,
+                achievedAt: now,
+            }, { merge: true });
+            const badgeJourneyRef = db.collection('userBadges').doc(`${callerUid}_JOURNEY_COMPLETE`);
+            transaction.set(badgeJourneyRef, {
+                id: `${callerUid}_JOURNEY_COMPLETE`,
+                userId: callerUid,
+                badgeKey: 'JOURNEY_COMPLETE',
+                name: gamification_1.BADGES.JOURNEY_COMPLETE.name,
+                description: gamification_1.BADGES.JOURNEY_COMPLETE.description,
+                icon: gamification_1.BADGES.JOURNEY_COMPLETE.icon,
+                requirement: gamification_1.BADGES.JOURNEY_COMPLETE.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        // 5. Streak update
+        const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+        const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+        const lastActivityDate = userData?.lastActivityDate || null;
+        const streakUpdate = (0, gamification_1.calculateStreakUpdate)(currentStreak, longestStreak, lastActivityDate, today);
+        if (streakUpdate.currentStreak >= 7) {
+            const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+            transaction.set(badgeCommittedRef, {
+                id: `${callerUid}_COMMITTED`,
+                userId: callerUid,
+                badgeKey: 'COMMITTED',
+                name: gamification_1.BADGES.COMMITTED.name,
+                description: gamification_1.BADGES.COMMITTED.description,
+                icon: gamification_1.BADGES.COMMITTED.icon,
+                requirement: gamification_1.BADGES.COMMITTED.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        if (streakUpdate.currentStreak >= 30) {
+            const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+            transaction.set(badgeDiscRef, {
+                id: `${callerUid}_DISCIPLINED`,
+                userId: callerUid,
+                badgeKey: 'DISCIPLINED',
+                name: gamification_1.BADGES.DISCIPLINED.name,
+                description: gamification_1.BADGES.DISCIPLINED.description,
+                icon: gamification_1.BADGES.DISCIPLINED.icon,
+                requirement: gamification_1.BADGES.DISCIPLINED.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+        const newTotalXp = currentXp + totalAwardedXp;
+        const newLevel = (0, gamification_1.calculateLevel)(newTotalXp).currentLevel;
+        // 6. Update user doc
+        transaction.set(userDocRef, {
+            xp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        // 7. Update userGamification doc
+        const gamificationRef = db.collection('userGamification').doc(callerUid);
+        transaction.set(gamificationRef, {
+            userId: callerUid,
+            xp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        // 8. Audit log
+        const auditDocRef = db.collection('auditLogs').doc();
+        transaction.set(auditDocRef, {
+            id: auditDocRef.id,
+            actorUserId: callerUid,
+            actorEmail: request.auth?.token.email || null,
+            actorRoles: request.auth?.token.roles || ['CUSTOMER'],
+            action: 'JOURNEY_DAY_COMPLETED',
+            resourceType: 'journeyLogs',
+            resourceId: journeyLogRef.id,
+            timestamp: now,
+            metadata: {
+                dayNumber: day,
+                awardedXp: totalAwardedXp,
+                newTotalXp,
+                currentStreak: streakUpdate.currentStreak,
+            },
+        });
+        return {
+            success: true,
+            dayNumber: day,
+            awardedXp: totalAwardedXp,
+            totalXp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+        };
+    });
+});
+/**
+ * Authoritative Community Post Creation Cloud Function.
+ * Verifies entitlement, persists discussion post, awards 10 XP, and maintains activity streak.
+ */
+exports.createCommunityPost = functions.https.onCall(async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+    }
+    const { title, body, tags } = request.data || {};
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'A non-empty title is required.');
+    }
+    if (!body || typeof body !== 'string' || body.trim().length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'A non-empty body is required.');
+    }
+    const entDocRef = db.collection('entitlements').doc(`${callerUid}_COMMUNITY_ACCESS`);
+    const userDocRef = db.collection('users').doc(callerUid);
+    return await db.runTransaction(async (transaction) => {
+        const [entSnap, userSnap] = await Promise.all([
+            transaction.get(entDocRef),
+            transaction.get(userDocRef),
+        ]);
+        const isAuthorized = (entSnap.exists && entSnap.data()?.status === 'ACTIVE') ||
+            (userSnap.exists && userSnap.data()?.communityAccess === true);
+        if (!isAuthorized) {
+            throw new functions.https.HttpsError('permission-denied', 'Active community entitlement is required to publish discussions.');
+        }
+        const userData = userSnap.data();
+        const now = new Date().toISOString();
+        const today = now.slice(0, 10);
+        const postRef = db.collection('communityPosts').doc();
+        const postDoc = {
+            id: postRef.id,
+            title: title.trim(),
+            body: body.trim(),
+            authorId: callerUid,
+            authorName: userData?.displayName ||
+                (userData?.firstName && userData?.lastName ? `${userData.firstName} ${userData.lastName}` : 'Community Member'),
+            authorRole: Array.isArray(userData?.roles) && userData.roles.length > 0 ? userData.roles[0] : 'CUSTOMER',
+            tags: Array.isArray(tags) ? tags.slice(0, 5) : [],
+            likesCount: 0,
+            commentsCount: 0,
+            isLocked: false,
+            status: 'published',
+            createdAt: now,
+            updatedAt: now,
+        };
+        transaction.set(postRef, postDoc);
+        // Award 10 XP for post creation
+        const postXp = gamification_1.XP_VALUES.COMMUNITY_POST_CREATED; // 10 XP
+        const xpTxRef = db.collection('xpTransactions').doc(`xp_post_${callerUid}_${postRef.id}`);
+        transaction.set(xpTxRef, {
+            id: xpTxRef.id,
+            userId: callerUid,
+            amount: postXp,
+            type: 'EARNED',
+            source: 'COMMUNITY_POST_CREATED',
+            sourceId: postRef.id,
+            createdAt: now,
+            metadata: { title: title.trim() },
+        });
+        // Streak update
+        const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+        const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+        const lastActivityDate = userData?.lastActivityDate || null;
+        const streakUpdate = (0, gamification_1.calculateStreakUpdate)(currentStreak, longestStreak, lastActivityDate, today);
+        if (streakUpdate.currentStreak >= 7) {
+            const badgeCommittedRef = db.collection('userBadges').doc(`${callerUid}_COMMITTED`);
+            transaction.set(badgeCommittedRef, {
+                id: `${callerUid}_COMMITTED`,
+                userId: callerUid,
+                badgeKey: 'COMMITTED',
+                name: gamification_1.BADGES.COMMITTED.name,
+                description: gamification_1.BADGES.COMMITTED.description,
+                icon: gamification_1.BADGES.COMMITTED.icon,
+                requirement: gamification_1.BADGES.COMMITTED.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        if (streakUpdate.currentStreak >= 30) {
+            const badgeDiscRef = db.collection('userBadges').doc(`${callerUid}_DISCIPLINED`);
+            transaction.set(badgeDiscRef, {
+                id: `${callerUid}_DISCIPLINED`,
+                userId: callerUid,
+                badgeKey: 'DISCIPLINED',
+                name: gamification_1.BADGES.DISCIPLINED.name,
+                description: gamification_1.BADGES.DISCIPLINED.description,
+                icon: gamification_1.BADGES.DISCIPLINED.icon,
+                requirement: gamification_1.BADGES.DISCIPLINED.requirement,
+                awardedAt: now,
+            }, { merge: true });
+        }
+        const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+        const newTotalXp = currentXp + postXp;
+        const newLevel = (0, gamification_1.calculateLevel)(newTotalXp).currentLevel;
+        transaction.set(userDocRef, {
+            xp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        const gamificationRef = db.collection('userGamification').doc(callerUid);
+        transaction.set(gamificationRef, {
+            userId: callerUid,
+            xp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        return {
+            success: true,
+            postId: postRef.id,
+            awardedXp: postXp,
+            totalXp: newTotalXp,
+        };
+    });
+});
+/**
+ * Authoritative Community Comment Creation Cloud Function.
+ * Awards 5 XP and maintains activity streak.
+ */
+exports.createCommunityComment = functions.https.onCall(async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+    }
+    const { postId, body } = request.data || {};
+    if (!postId || typeof postId !== 'string') {
+        throw new functions.https.HttpsError('invalid-argument', 'postId is required.');
+    }
+    if (!body || typeof body !== 'string' || body.trim().length === 0) {
+        throw new functions.https.HttpsError('invalid-argument', 'A non-empty body is required.');
+    }
+    const postDocRef = db.collection('communityPosts').doc(postId);
+    const userDocRef = db.collection('users').doc(callerUid);
+    const entDocRef = db.collection('entitlements').doc(`${callerUid}_COMMUNITY_ACCESS`);
+    return await db.runTransaction(async (transaction) => {
+        const [postSnap, userSnap, entSnap] = await Promise.all([
+            transaction.get(postDocRef),
+            transaction.get(userDocRef),
+            transaction.get(entDocRef),
+        ]);
+        if (!postSnap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Discussion post not found.');
+        }
+        const isAuthorized = (entSnap.exists && entSnap.data()?.status === 'ACTIVE') ||
+            (userSnap.exists && userSnap.data()?.communityAccess === true);
+        if (!isAuthorized) {
+            throw new functions.https.HttpsError('permission-denied', 'Active community entitlement is required to participate in discussions.');
+        }
+        const userData = userSnap.data();
+        const now = new Date().toISOString();
+        const today = now.slice(0, 10);
+        const commentRef = db.collection('communityComments').doc();
+        transaction.set(commentRef, {
+            id: commentRef.id,
+            postId,
+            authorId: callerUid,
+            authorName: userData?.displayName ||
+                (userData?.firstName && userData?.lastName ? `${userData.firstName} ${userData.lastName}` : 'Community Member'),
+            body: body.trim(),
+            createdAt: now,
+        });
+        transaction.update(postDocRef, {
+            commentsCount: admin.firestore.FieldValue.increment(1),
+            updatedAt: now,
+        });
+        // Award 5 XP for comment creation
+        const commentXp = gamification_1.XP_VALUES.COMMUNITY_COMMENT_CREATED; // 5 XP
+        const xpTxRef = db.collection('xpTransactions').doc(`xp_comment_${callerUid}_${commentRef.id}`);
+        transaction.set(xpTxRef, {
+            id: xpTxRef.id,
+            userId: callerUid,
+            amount: commentXp,
+            type: 'EARNED',
+            source: 'COMMUNITY_COMMENT_CREATED',
+            sourceId: commentRef.id,
+            createdAt: now,
+            metadata: { postId },
+        });
+        // Streak update
+        const currentStreak = typeof userData?.currentStreak === 'number' ? userData.currentStreak : 0;
+        const longestStreak = typeof userData?.longestStreak === 'number' ? userData.longestStreak : 0;
+        const lastActivityDate = userData?.lastActivityDate || null;
+        const streakUpdate = (0, gamification_1.calculateStreakUpdate)(currentStreak, longestStreak, lastActivityDate, today);
+        const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+        const newTotalXp = currentXp + commentXp;
+        const newLevel = (0, gamification_1.calculateLevel)(newTotalXp).currentLevel;
+        transaction.set(userDocRef, {
+            xp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        const gamificationRef = db.collection('userGamification').doc(callerUid);
+        transaction.set(gamificationRef, {
+            userId: callerUid,
+            xp: newTotalXp,
+            level: newLevel,
+            currentStreak: streakUpdate.currentStreak,
+            longestStreak: streakUpdate.longestStreak,
+            lastActivityDate: today,
+            updatedAt: now,
+        }, { merge: true });
+        return {
+            success: true,
+            commentId: commentRef.id,
+            awardedXp: commentXp,
+            totalXp: newTotalXp,
+        };
+    });
+});
+/**
+ * Seed Initial Rewards Catalogue via Cloud Function.
+ */
+exports.seedInitialRewards = functions.https.onCall(async (request) => {
+    const callerUid = request.auth?.uid;
+    if (!callerUid) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication is required.');
+    }
+    const batch = db.batch();
+    const now = new Date().toISOString();
+    for (const reward of gamification_1.INITIAL_REWARDS) {
+        const docRef = db.collection('rewards').doc(reward.id);
+        batch.set(docRef, {
+            ...reward,
+            createdAt: now,
+            updatedAt: now,
+        }, { merge: true });
+    }
+    await batch.commit();
+    return { success: true, count: gamification_1.INITIAL_REWARDS.length };
 });
 //# sourceMappingURL=index.js.map

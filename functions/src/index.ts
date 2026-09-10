@@ -9,9 +9,6 @@ import {
   MILESTONES,
   BADGES,
   INITIAL_REWARDS,
-  MilestoneKey,
-  BadgeKey,
-  XpEventType,
 } from './gamification';
 
 admin.initializeApp();
@@ -1370,8 +1367,8 @@ export const issueCertificate = functions.https.onCall(async (data, context) => 
   }
 
   const now = new Date().toISOString();
-  // Collision-safe certificate number generation
-  const certNumber = `VIR-CERT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  // Cryptographically secure collision-safe certificate number generation
+  const certNumber = generateCertificateNumber();
 
   // 4. Collision check
   const publicCertRef = db.collection('publicCertificates').doc(certNumber);
@@ -1380,20 +1377,25 @@ export const issueCertificate = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError('already-exists', 'A certificate with this number already exists. Please retry.');
   }
 
-  const certRef = db.collection('certificates').doc();
+  const certificateId = `cert_${targetUserId}_${courseId}`;
+  const certRef = db.collection('certificates').doc(certificateId);
   const batch = db.batch();
 
   // 5. Full private record (includes targetUserId and student details)
   batch.set(certRef, {
-    id: certRef.id,
+    id: certificateId,
+    certificateId,
     certificateNumber: certNumber,
     userId: targetUserId,
     recipientName,
     courseId,
     courseTitle,
     issuedAt: now,
+    issueDate: now,
     issuedByUid: callerUid,
-    status: 'VALID',
+    status: 'ACTIVE',
+    isRevoked: false,
+    certificateType: 'COURSE_COMPLETION',
   });
 
   // 6. Public verification record with zero PII
@@ -1401,8 +1403,11 @@ export const issueCertificate = functions.https.onCall(async (data, context) => 
     certificateNumber: certNumber,
     recipientName,
     courseTitle,
+    courseId,
     issuedAt: now,
-    status: 'VALID',
+    status: 'ACTIVE',
+    certificateType: 'COURSE_COMPLETION',
+    issuer: 'ZIRON Restart School - Virexon Biosciences Education Division',
   });
 
   // 7. Authoritative audit trail
@@ -3302,7 +3307,7 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
   const enrollmentRef = db.collection('enrollments').doc(progressId);
   const userDocRef = db.collection('users').doc(callerUid);
 
-  const [progressSnap, enrollmentSnap, userSnap] = await Promise.all([
+  const [progressSnap, enrollmentSnap, freshUserSnap] = await Promise.all([
     progressRef.get(),
     enrollmentRef.get(),
     userDocRef.get(),
@@ -3329,8 +3334,8 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
   const batch = db.batch();
 
   // Gamification & XP Awarding
-  const userData = userSnap.exists ? userSnap.data() : null;
-  const currentXp = typeof userData?.xp === 'number' ? userData.xp : 0;
+  const freshUserData = freshUserSnap.exists ? freshUserSnap.data() : null;
+  const currentXp = typeof freshUserData?.xp === 'number' ? freshUserData.xp : 0;
   let totalAwardedXp = 0;
 
   const isNewLessonCompletion = !existingCompletedIds.includes(lessonId);
@@ -3540,7 +3545,10 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
   await batch.commit();
 
   // Authoritative automatic certificate issuance upon 100% curriculum completion
-  let issuedCertificate = null;
+  let issuedCertificate: Record<string, unknown> | null = null;
+  let certIssuanceError: string | null = null;
+  let certificateStatus: 'ISSUED' | 'PENDING_RECONCILIATION' | 'NOT_APPLICABLE' = 'NOT_APPLICABLE';
+
   if (isCompleted) {
     try {
       issuedCertificate = await authoritativelyIssueCertificate(
@@ -3550,8 +3558,22 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
         callerEmail,
         roles
       );
+      certificateStatus = 'ISSUED';
+      await progressRef.update({
+        certificateStatus: 'ISSUED',
+        certificateId: (issuedCertificate as any).id || `cert_${callerUid}_${courseId}`,
+        certificateNumber: (issuedCertificate as any).certificateNumber,
+        updatedAt: now,
+      });
     } catch (certError) {
-      console.warn('Certificate issuance notice:', certError);
+      console.error('Authoritative automatic certificate issuance deferred/failed in completeSchoolLesson:', certError);
+      certIssuanceError = certError instanceof Error ? certError.message : 'Certificate issuance deferred for reconciliation.';
+      certificateStatus = 'PENDING_RECONCILIATION';
+      await progressRef.update({
+        certificateStatus: 'PENDING_RECONCILIATION',
+        certificateError: certIssuanceError,
+        updatedAt: now,
+      });
     }
   }
 
@@ -3568,6 +3590,8 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
     totalXp: newTotalXp,
     level: newLevel,
     certificate: issuedCertificate,
+    certificateStatus,
+    certificateError: certIssuanceError,
   };
 });
 
@@ -3578,23 +3602,25 @@ export const completeSchoolLesson = functions.https.onCall(async (data, context)
 /**
  * Generates a unique, non-predictable, human-readable certificate number.
  * Format: ZRN-CERT-YYYY-XXXX-XXXX
- * Uses Crockford Base32 characters (eliminates confusing glyphs like I, L, O, U).
+ * Uses cryptographic randomness (crypto.randomBytes) and Crockford Base32 characters
+ * (eliminates confusing glyphs like I, L, O, U) with zero modulo bias (256 % 32 == 0).
  */
-const CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const CERT_CROCKFORD_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 export function generateCertificateNumber(year = new Date().getFullYear()): string {
+  const bytes = crypto.randomBytes(8);
   let seg1 = '';
   let seg2 = '';
   for (let i = 0; i < 4; i++) {
-    seg1 += CROCKFORD_ALPHABET.charAt(Math.floor(Math.random() * CROCKFORD_ALPHABET.length));
-    seg2 += CROCKFORD_ALPHABET.charAt(Math.floor(Math.random() * CROCKFORD_ALPHABET.length));
+    seg1 += CERT_CROCKFORD_ALPHABET.charAt(bytes[i] & 31);
+    seg2 += CERT_CROCKFORD_ALPHABET.charAt(bytes[i + 4] & 31);
   }
   return `ZRN-CERT-${year}-${seg1}-${seg2}`;
 }
 
 /**
  * Authoritative Server-Side Helper: Issue a Course Completion Certificate.
- * Strictly verifies prerequisites, enforces idempotency, prevents duplicate certificates,
- * and maintains immutable audit logs and public verification projection.
+ * Strictly verifies prerequisites, enforces idempotency via Firestore transaction, prevents duplicate
+ * certificates, and maintains immutable audit logs and privacy-minimized public verification projection.
  */
 export async function authoritativelyIssueCertificate(
   userId: string,
@@ -3605,11 +3631,17 @@ export async function authoritativelyIssueCertificate(
 ): Promise<Record<string, unknown>> {
   const certificateId = `cert_${userId}_${courseId}`;
   const certRef = db.collection('certificates').doc(certificateId);
-  const existingCertSnap = await certRef.get();
 
-  // Strict idempotency: if certificate already exists, return it immediately without duplicate issuance
-  if (existingCertSnap.exists) {
-    return existingCertSnap.data() as Record<string, unknown>;
+  // Fast check: if certificate already exists, return it immediately (idempotent)
+  const quickSnap = await certRef.get();
+  if (quickSnap.exists) {
+    return quickSnap.data() as Record<string, unknown>;
+  }
+
+  // Pre-validate eligibility before transaction
+  const access = await checkUserSchoolAccess(userId, actorRoles, actorEmail, false);
+  if (!access.hasAccess) {
+    throw new Error('School eligibility requirement not met: 3 unique activated containers are required.');
   }
 
   // Load recipient and course data
@@ -3639,90 +3671,102 @@ export async function authoritativelyIssueCertificate(
     }
   }
 
-  // Generate collision-resistant certificateNumber
-  let certificateNumber = generateCertificateNumber();
-  let collisionAttempts = 0;
-  while (collisionAttempts < 5) {
-    const existingPub = await db.collection('publicCertificates').doc(certificateNumber).get();
-    if (!existingPub.exists) break;
-    certificateNumber = generateCertificateNumber();
-    collisionAttempts++;
-  }
+  // Atomic Firestore Transaction guarantees true concurrency safety and idempotency
+  return await db.runTransaction(async (transaction) => {
+    // Read deterministic certRef inside transaction
+    const txCertSnap = await transaction.get(certRef);
+    if (txCertSnap.exists) {
+      return txCertSnap.data() as Record<string, unknown>;
+    }
 
-  const verificationToken = crypto.randomBytes(16).toString('hex');
-  const now = new Date().toISOString();
-  const issuer = 'ZIRON Restart School - Virexon Biosciences Education Division';
-  const verificationUrl = `/verify/certificate?number=${certificateNumber}`;
+    // Generate cryptographic certificate number with collision check within transaction
+    let candidateNumber = generateCertificateNumber();
+    let pubRef = db.collection('publicCertificates').doc(candidateNumber);
+    let pubSnap = await transaction.get(pubRef);
+    let collisionAttempts = 0;
+    while (pubSnap.exists && collisionAttempts < 5) {
+      candidateNumber = generateCertificateNumber();
+      pubRef = db.collection('publicCertificates').doc(candidateNumber);
+      pubSnap = await transaction.get(pubRef);
+      collisionAttempts++;
+    }
 
-  const certDoc = {
-    id: certificateId,
-    certificateId,
-    certificateNumber,
-    userId,
-    recipientName,
-    userDisplayName: recipientName,
-    courseId,
-    courseTitle,
-    issuedAt: now,
-    issueDate: now,
-    completedAt: completedAt || now,
-    issuer,
-    status: 'ACTIVE',
-    isRevoked: false,
-    verificationToken,
-    verificationHash: verificationToken,
-    verificationUrl,
-    certificateType: 'COURSE_COMPLETION',
-    createdAt: now,
-    updatedAt: now,
-    revokedAt: null,
-    revocationReason: null,
-    revokedBy: null,
-  };
+    if (pubSnap.exists) {
+      throw new Error('Certificate number collision encountered. Transaction will retry.');
+    }
 
-  // Safe public projection (no sensitive user data, no email, phone, user IDs, XP, streaks, or journey logs)
-  const publicCertDoc = {
-    certificateNumber,
-    status: 'ACTIVE',
-    courseTitle,
-    courseId,
-    recipientName,
-    completedAt: completedAt || now,
-    issuedAt: now,
-    issuer,
-    certificateType: 'COURSE_COMPLETION',
-    verificationToken,
-    createdAt: now,
-    updatedAt: now,
-    revokedAt: null,
-    revocationReason: null,
-  };
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const now = new Date().toISOString();
+    const issuer = 'ZIRON Restart School - Virexon Biosciences Education Division';
+    const verificationUrl = `/verify/certificate?number=${candidateNumber}`;
 
-  const batch = db.batch();
-  batch.set(certRef, certDoc);
-  batch.set(db.collection('publicCertificates').doc(certificateNumber), publicCertDoc);
+    const certDoc = {
+      id: certificateId,
+      certificateId,
+      certificateNumber: candidateNumber,
+      userId,
+      recipientName,
+      userDisplayName: recipientName,
+      courseId,
+      courseTitle,
+      issuedAt: now,
+      issueDate: now,
+      completedAt: completedAt || now,
+      issuer,
+      status: 'ACTIVE',
+      isRevoked: false,
+      verificationToken,
+      verificationHash: verificationToken,
+      verificationUrl,
+      certificateType: 'COURSE_COMPLETION',
+      createdAt: now,
+      updatedAt: now,
+      revokedAt: null,
+      revocationReason: null,
+      revokedBy: null,
+    };
 
-  const auditRef = db.collection('auditLogs').doc();
-  batch.set(auditRef, {
-    id: auditRef.id,
-    actorUserId: userId,
-    actorEmail: actorEmail || null,
-    actorRoles: actorRoles.length > 0 ? actorRoles : ['CUSTOMER'],
-    action: 'CERTIFICATE_ISSUED',
-    resourceType: 'certificates',
-    resourceId: certificateId,
-    timestamp: now,
-    metadata: {
-      certificateNumber,
+    // Safe public projection (no sensitive user data, no email, phone, user IDs, XP, streaks, or verificationToken)
+    const publicCertDoc = {
+      certificateNumber: candidateNumber,
+      status: 'ACTIVE',
+      courseTitle,
       courseId,
       recipientName,
       completedAt: completedAt || now,
-      enforcedBy: 'SERVER_AUTHORITY',
-    },
-  });
+      issuedAt: now,
+      issuer,
+      certificateType: 'COURSE_COMPLETION',
+      createdAt: now,
+      updatedAt: now,
+      revokedAt: null,
+      revocationReason: null,
+    };
 
-  await batch.commit();
-  return certDoc;
+    transaction.set(certRef, certDoc);
+    transaction.set(pubRef, publicCertDoc);
+
+    const auditRef = db.collection('auditLogs').doc();
+    transaction.set(auditRef, {
+      id: auditRef.id,
+      actorUserId: userId,
+      actorEmail: actorEmail || null,
+      actorRoles: actorRoles.length > 0 ? actorRoles : ['CUSTOMER'],
+      action: 'CERTIFICATE_ISSUED',
+      resourceType: 'certificates',
+      resourceId: certificateId,
+      timestamp: now,
+      metadata: {
+        certificateNumber: candidateNumber,
+        courseId,
+        recipientName,
+        completedAt: completedAt || now,
+        enforcedBy: 'SERVER_AUTHORITY',
+      },
+    });
+
+    return certDoc;
+  });
 }
 
 /**
@@ -3793,6 +3837,19 @@ export const issueCourseCertificate = functions.https.onCall(async (data, contex
     );
   }
 
+  // Check if certificate already exists and has been revoked
+  const certId = `cert_${callerUid}_${courseId}`;
+  const existingCertSnap = await db.collection('certificates').doc(certId).get();
+  if (existingCertSnap.exists) {
+    const existingData = existingCertSnap.data()!;
+    if (existingData.status === 'REVOKED' || existingData.isRevoked) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'This certificate has been revoked by institutional authority and cannot be reissued.'
+      );
+    }
+  }
+
   const certificate = await authoritativelyIssueCertificate(
     callerUid,
     courseId,
@@ -3809,7 +3866,7 @@ export const issueCourseCertificate = functions.https.onCall(async (data, contex
 
 /**
  * Callable Function: Authoritatively Revoke Certificate
- * Administrative action with required audit reasoning.
+ * Administrative action with required audit reasoning. Idempotent on repeated calls.
  */
 export const revokeCertificate = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -3859,6 +3916,18 @@ export const revokeCertificate = functions.https.onCall(async (data, context) =>
   const certificateNumber = certData.certificateNumber;
   const now = new Date().toISOString();
 
+  // Idempotency: if already revoked, return status cleanly without redundant writes
+  if (certData.status === 'REVOKED' || certData.isRevoked) {
+    return {
+      success: true,
+      certificateId,
+      certificateNumber,
+      status: 'REVOKED',
+      revokedAt: certData.revokedAt || now,
+      alreadyRevoked: true,
+    };
+  }
+
   const batch = db.batch();
   batch.update(certRef, {
     status: 'REVOKED',
@@ -3871,12 +3940,16 @@ export const revokeCertificate = functions.https.onCall(async (data, context) =>
 
   if (certificateNumber) {
     const pubCertRef = db.collection('publicCertificates').doc(certificateNumber);
-    batch.update(pubCertRef, {
-      status: 'REVOKED',
-      revokedAt: now,
-      revocationReason: reason.trim(),
-      updatedAt: now,
-    });
+    batch.set(
+      pubCertRef,
+      {
+        status: 'REVOKED',
+        revokedAt: now,
+        revocationReason: reason.trim(),
+        updatedAt: now,
+      },
+      { merge: true }
+    );
   }
 
   const auditRef = db.collection('auditLogs').doc();
@@ -3924,20 +3997,25 @@ export const verifyCertificate = functions.https.onCall(async (data) => {
 
   const clean = identifier.trim();
 
-  // Try direct lookup by certificateNumber
+  // 1. Direct lookup by certificateNumber (e.g. ZRN-CERT-...)
   let pubDoc = await db.collection('publicCertificates').doc(clean.toUpperCase()).get();
 
-  // If not found by certificateNumber, search by verificationToken
+  // 2. Fallback lookup by private verificationToken (if presented by holder via QR or direct link)
   if (!pubDoc.exists) {
-    const tokenQuery = await db.collection('publicCertificates')
+    const tokenQuery = await db.collection('certificates')
       .where('verificationToken', '==', clean)
       .limit(1)
       .get();
     if (!tokenQuery.empty) {
-      pubDoc = tokenQuery.docs[0];
+      const privateData = tokenQuery.docs[0].data();
+      const certNum = privateData.certificateNumber;
+      if (certNum) {
+        pubDoc = await db.collection('publicCertificates').doc(certNum).get();
+      }
     }
   }
 
+  // Not found: uninformative error that cannot be used for user enumeration or oracle attacks
   if (!pubDoc.exists) {
     return {
       isValid: false,
@@ -3950,7 +4028,7 @@ export const verifyCertificate = functions.https.onCall(async (data) => {
 
   return {
     isValid: true,
-    status: d.status,
+    status: isRevoked ? 'REVOKED' : 'ACTIVE',
     isRevoked,
     certificateNumber: d.certificateNumber,
     recipientName: d.recipientName,
@@ -3960,8 +4038,8 @@ export const verifyCertificate = functions.https.onCall(async (data) => {
     issuedAt: d.issuedAt,
     completedAt: d.completedAt,
     certificateType: d.certificateType || 'COURSE_COMPLETION',
-    revokedAt: d.revokedAt || null,
-    revocationReason: d.revocationReason || null,
+    revokedAt: isRevoked ? (d.revokedAt || null) : null,
+    revocationReason: isRevoked ? (d.revocationReason || 'Administrative Compliance Review') : null,
     educationalDisclaimer:
       'Certificates issued by ZIRON Restart School are educational completion credentials only. They do not certify medical treatment, addiction recovery, scientific claims, or clinical outcomes.',
   };

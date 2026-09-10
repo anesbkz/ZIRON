@@ -717,6 +717,9 @@ export async function completeSchoolLesson(
   totalLessonsCount: number;
   isCompleted: boolean;
   completedAt: string | null;
+  certificate?: any;
+  certificateStatus?: string;
+  certificateError?: string | null;
 }> {
   const callable = httpsCallable<
     { courseId: string; lessonId: string },
@@ -729,6 +732,9 @@ export async function completeSchoolLesson(
       totalLessonsCount: number;
       isCompleted: boolean;
       completedAt: string | null;
+      certificate?: any;
+      certificateStatus?: string;
+      certificateError?: string | null;
     }
   >(functionsInstance, 'completeSchoolLesson');
 
